@@ -74,12 +74,12 @@ class TendonEnvOneSegment(Env):
    @property
    def observation_space(self):
       """allowed value ranges for states"""
-      return Box(low=-np.inf, high=np.inf, shape=(10,), dtype=np.float32)
+      return Box(low=-np.inf, high=np.inf, shape=(10,))
 
    @property
    def action_space(self):
       """allowed value ranges for actions"""
-      return Box(low=-self.delta_l, high=self.delta_l, shape=(3,), dtype=np.float32)
+      return Box(low=-self.delta_l, high=self.delta_l, shape=(3,))
 
    def reset(self):
       """ Resets the environment and updates other variables accordingly. Returns state of new episode. """
