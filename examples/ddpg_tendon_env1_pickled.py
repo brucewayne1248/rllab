@@ -1,19 +1,18 @@
 from rllab.algos.ddpg import DDPG
-from rllab.envs.box2d.cartpole_env import CartpoleEnv
+from examples.tendon_env1 import TendonEnvOneSegment
 from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import run_experiment_lite
 from rllab.exploration_strategies.ou_strategy import OUStrategy
 from rllab.policies.deterministic_mlp_policy import DeterministicMLPPolicy
 from rllab.q_functions.continuous_mlp_q_function import ContinuousMLPQFunction
 
-
 def run_task(*_):
-    env = normalize(CartpoleEnv())
+    env = normalize(TendonEnvOneSegment())
 
     policy = DeterministicMLPPolicy(
         env_spec=env.spec,
         # The neural network policy should have two hidden layers, each with 32 hidden units.
-        hidden_sizes=(32, 32)
+        hidden_sizes=(64, 64)
     )
 
     es = OUStrategy(env_spec=env.spec)
