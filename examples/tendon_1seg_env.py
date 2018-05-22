@@ -5,7 +5,7 @@ from rllab.utils.plot_utils import Arrow3D, plot_loop_pause
 
 import numpy as np
 from numpy.linalg import norm
-from math import sqrt, asin, atan2, cos, sin
+from math import sqrt, asin, atan2, cos, sin, acos
 import matplotlib.pyplot as plt
 
 """
@@ -17,7 +17,7 @@ allowing for greater action space 0.005 m
 resets continuum robot completely random in workspace
 """
 
-class TendonEnvOneSegment(Env):
+class TendonOneSegmentEnv(Env):
    """
    class handling the forward kinematics of a single segment tendon driven continuum robot
    lmin, lmax: min and max tendon length [m]:
@@ -29,8 +29,8 @@ class TendonEnvOneSegment(Env):
    total_goals_reached = 0
 
    def __init__(self):
-      self.lmin = 0.075
-      self.lmax = 0.125
+      self.lmin = 0.085
+      self.lmax = 0.115
       self.d = 0.01
       self.n = 5
 
@@ -62,7 +62,7 @@ class TendonEnvOneSegment(Env):
       self.goal = None # goal to be reached by the robot's tip [x, y, z] [m]
       self.tangent_vec_goal = None # tangent vector of goal position
       self.delta_l = 0.001 # max tendon length change per timestep
-      self.max_steps = 150 # max steps per episode
+      self.max_steps = 100 # max steps per episode
       self.eps = 1e-3 # distance tolerance to reach goal
       self.dist_start = None # start distance to goal
       self.dist_end = None # end distance to goal of episode
@@ -93,7 +93,7 @@ class TendonEnvOneSegment(Env):
       self.steps = 0
       self.info["str"] = "Reset the environment."
       self.info["goal"] = False
-      self.info["tangent_vec_goal"] = self.tangent_vec_goal
+#      self.info["tangent_vec_goal"] = self.tangent_vec_goal
       return self._state
 
    def set_goal(self):
@@ -102,7 +102,7 @@ class TendonEnvOneSegment(Env):
       l1goal = np.random.uniform(self.lmin, self.lmax)
       l2goal = np.random.uniform(self.lmin, self.lmax)
       l3goal = np.random.uniform(self.lmin, self.lmax)
-      kappa, phi, seg_len = self.configuration_space(l1goal, l2goal, l3goal)
+      kappa, phi, seg_len = self.arc_params(l1goal, l2goal, l3goal)
       T01 = self.transformation_matrix(kappa, phi, seg_len)
       self.goal = np.matmul(T01, self.base)[0:3]
       self.tangent_vec_goal =  T01[0:3, 2]
@@ -117,6 +117,7 @@ class TendonEnvOneSegment(Env):
       self._state = self.get_state()
 
       reward, done, self.info = self.get_reward_done_info(self.new_dist_euclid, self.old_dist_euclid, self.steps)
+
       if done == True:
          self.total_episodes += 1
          if "GOAL" in self.info['str']:
@@ -135,7 +136,7 @@ class TendonEnvOneSegment(Env):
    def update_workspace(self):
       """updates configuration and work space variables after changing tendon lengths"""
       self.lengths = np.array([self.l1, self.l2, self.l3])
-      self.kappa, self.phi, self.seg_len = self.configuration_space(self.l1, self.l2, self.l3)
+      self.kappa, self.phi, self.seg_len = self.arc_params(self.l1, self.l2, self.l3)
       self.T01 = self.transformation_matrix(self.kappa, self.phi, self.seg_len)
       self.normal_vec = self.T01[0:3, 0]
       self.binormal_vec = self.T01[0:3, 1]
@@ -164,9 +165,20 @@ class TendonEnvOneSegment(Env):
    def get_reward_done_info(self, new_dist_euclid, old_dist_euclid, steps):
       """returns reward, done, info dict after taking action"""
       done = False
+      alpha = 0.4; c1 = 1; c2 = 100; gamma=0.99 # reward function params
       # regular step without terminating episode
-      reward = (1-(new_dist_euclid/self.dist_start)**0.2) \
-               -100*(new_dist_euclid-old_dist_euclid)
+      """R1"""
+#      reward = c1*(1-(new_dist_euclid/self.dist_start)**alpha) \
+#               -c2*(new_dist_euclid-old_dist_euclid)
+      """R2"""
+#      reward = c1*(1-(new_dist_euclid/self.dist_start)**alpha)
+      """R3"""
+#      reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
+      """R4"""
+#      reward = -gamma*((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
+      """R5"""
+      reward = -((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
+
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(new_dist_euclid-old_dist_euclid))
 
@@ -194,11 +206,11 @@ class TendonEnvOneSegment(Env):
             self.info["str"] = "Max steps {}, distance to goal {:5.2f}mm, total distance covered {:5.2f}mm." \
                                .format(self.max_steps, 1000*self.dist_end, 1000*(self.dist_start-self.dist_end))
 
-      gamma_t = 1-(self.steps/(self.max_steps+1))
-      reward = gamma_t*reward
+#      gamma_t = 1-(self.steps/(self.max_steps+1))
+#      reward = gamma_t*reward
       return reward, done, self.info
 
-   def configuration_space(self, l1, l2, l3):
+   def arc_params(self, l1, l2, l3):
       # useful expressions to shorten formulas below
       lsum = l1+l2+l3
       expr = l1**2+l2**2+l3**2-l1*l2-l1*l3-l2*l3
@@ -225,6 +237,11 @@ class TendonEnvOneSegment(Env):
                        [-cos(phi)*sin(kappa*s), -sin(phi)*sin(kappa*s), cos(kappa*s), sin(kappa*s)/kappa],
                        [0, 0, 0, 1]])
       return T
+
+   def get_diff_angle(self, degree=False):
+      alpha = acos(np.dot(self.tangent_vec, self.tangent_vec_goal)) / \
+                  (norm(self.tangent_vec) * norm(self.tangent_vec_goal))
+      return alpha*180/np.pi if degree else alpha
 
    def render(self, mode="string", pause=0.0000001, save_frames=False):
       """ renders the 3d plot of the robot's arc, pause (float) determines how long each frame is shown
@@ -278,13 +295,13 @@ class TendonEnvOneSegment(Env):
              self.frame += 1
 
    def points_on_arc(self, kappa, num_points):
-        """ returns np.array([num_points, 3]) of arc points [x(s), y(s), z(s)] for plot [m] """
-        points = np.zeros((num_points, 3))
-        s = np.linspace(0, self.seg_len, num_points)
-        for i in range(num_points):
-            points[i] = np.matmul(self.transformation_matrix(self.kappa, self.phi, s[i]),
-                                  np.array([0.0, 0.0, 0.0, 1]))[0:3]
-        return points
+      """ returns np.array([num_points, 3]) of arc points [x(s), y(s), z(s)] for plot [m] """
+      points = np.zeros((num_points, 3))
+      s = np.linspace(0, self.seg_len, num_points)
+      for i in range(num_points):
+         points[i] = np.matmul(self.transformation_matrix(self.kappa, self.phi, s[i]),
+                               np.array([0.0, 0.0, 0.0, 1]))[0:3]
+      return points
 
    def init_render(self):
       """ sets up 3d plot """

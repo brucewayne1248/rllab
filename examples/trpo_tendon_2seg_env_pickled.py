@@ -3,16 +3,15 @@ from rllab.baselines.linear_feature_baseline import LinearFeatureBaseline
 from rllab.envs.normalized_env import normalize
 from rllab.misc.instrument import run_experiment_lite
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
-from examples.tendon_env1 import TendonEnvOneSegment
-import lasagne.nonlinearities as NL
+from examples.tendon_2seg_env import TendonTwoSegmentEnv#import lasagne.nonlinearities as NL
 
 def run_task(*_):
-   env = normalize(TendonEnvOneSegment())
+   env = normalize(TendonTwoSegmentEnv())
 
    policy = GaussianMLPPolicy(
          env_spec = env.spec,
-         hidden_sizes=(64, 64),
-         output_nonlinearity=NL.tanh
+         hidden_sizes=(64, 64)
+#         output_nonlinearity=NL.tanh
    )
 
    baseline = LinearFeatureBaseline(env_spec=env.spec)
@@ -23,7 +22,7 @@ def run_task(*_):
          baseline=baseline,
          batch_size = 4000,
          max_path_length=100,
-         n_itr=15000,
+         n_itr=10000,
          discount=0.99,
          step_size=0.01,
    )
@@ -31,7 +30,7 @@ def run_task(*_):
 
 run_experiment_lite(
       run_task,
-      n_parallel=2,
+      n_parallel=1,
       snapshot_mode="last",
       seed=1,
  )
