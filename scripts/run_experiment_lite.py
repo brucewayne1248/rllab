@@ -31,8 +31,8 @@ def run_experiment(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--n_parallel', type=int, default=1,
                         help='Number of parallel workers to perform rollouts. 0 => don\'t start any workers')
-    parser.add_argument(
-        '--exp_name', type=str, default=default_exp_name, help='Name of the experiment.')
+    parser.add_argument('--exp_name', type=str, default=default_exp_name,
+                        help='Name of the experiment.')
     parser.add_argument('--log_dir', type=str, default=None,
                         help='Path to save the log and iteration snapshot.')
     parser.add_argument('--snapshot_mode', type=str, default='all',

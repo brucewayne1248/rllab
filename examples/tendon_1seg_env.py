@@ -66,6 +66,7 @@ class TendonOneSegmentEnv(Env):
       self.eps = 1e-3 # distance tolerance to reach goal
       self.dist_start = None # start distance to goal
       self.dist_end = None # end distance to goal of episode
+      self.dist_min = None # min distance to goal reached within each episode
       self.dist = None # current distance to goal
 
    @property
@@ -78,22 +79,29 @@ class TendonOneSegmentEnv(Env):
       """allowed value range for actions"""
       return Box(low=-self.delta_l, high=self.delta_l, shape=(3,))
 
-   def reset(self):
+   def reset(self, lengths=None, goal=None, tangent_vec_goal=None):
       """ Resets the environment and updates other variables accordingly. Returns state of new episode. """
-      self.l1 = np.random.uniform(self.lmin, self.lmax)
-      self.l2 = np.random.uniform(self.lmin, self.lmax)
-      self.l3 = np.random.uniform(self.lmin, self.lmax)
+      self.l1 = np.random.uniform(self.lmin, self.lmax) if lengths is None else lengths[0]
+      self.l2 = np.random.uniform(self.lmin, self.lmax) if lengths is None else lengths[1]
+      self.l3 = np.random.uniform(self.lmin, self.lmax) if lengths is None else lengths[2]
       self.update_workspace()
       # create goal with a little distance away from tip-vetor
-      self.goal = self.tip_vec
-      while norm(self.goal-self.tip_vec) < 2*self.eps:
-         self.set_goal() # set a new goal for the episode
+      if goal is None and tangent_vec_goal is None:
+         self.goal = self.tip_vec
+         while norm(self.goal-self.tip_vec) < 2*self.eps:
+            self.set_goal() # set a new goal for the episode
+      elif goal is not None and tangent_vec_goal is not None:
+         self.goal = goal
+         self.tangent_vec_goal = tangent_vec_goal
+      else:
+         raise NotImplementedError
+
       self._state = self.get_state()
       self.dist_start = norm(self.goal-self.tip_vec)
+      self.dist_min = self.dist_start
       self.steps = 0
       self.info["str"] = "Reset the environment."
       self.info["goal"] = False
-#      self.info["tangent_vec_goal"] = self.tangent_vec_goal
       return self._state
 
    def set_goal(self):
@@ -106,7 +114,6 @@ class TendonOneSegmentEnv(Env):
       T01 = self.transformation_matrix(kappa, phi, seg_len)
       self.goal = np.matmul(T01, self.base)[0:3]
       self.tangent_vec_goal =  T01[0:3, 2]
-
 
    def step(self, action):
       """Steps the environment and returns new state, reward, done, info."""
@@ -161,6 +168,8 @@ class TendonOneSegmentEnv(Env):
       self.update_workspace()
       self.new_dist_vec = self.goal-self.tip_vec
       self.new_dist_euclid = norm(self.new_dist_vec)
+      if self.new_dist_euclid < self.dist_min:
+         self.dist_min = self.new_dist_euclid
 
    def get_reward_done_info(self, new_dist_euclid, old_dist_euclid, steps):
       """returns reward, done, info dict after taking action"""
@@ -173,11 +182,12 @@ class TendonOneSegmentEnv(Env):
       """R2"""
 #      reward = c1*(1-(new_dist_euclid/self.dist_start)**alpha)
       """R3"""
-#      reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
+      reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
       """R4"""
 #      reward = -gamma*((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
       """R5"""
-      reward = -((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
+#      reward = -((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
+      """R6 leave out gamma_t"""
 
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(new_dist_euclid-old_dist_euclid))
@@ -195,19 +205,19 @@ class TendonOneSegmentEnv(Env):
 
          if new_dist_euclid > self.dist_start+10*self.eps:
             reward = -100
-            self.info["str"] = "Moving too far away from goal @step {:3d}, start_dist: {:5.2f}mm, end_dist: {:5.2f}mm" \
+            self.info["str"] = "Moving too far away from goal @step {:3d}, start_dist: {:5.2f}mm, end_dist: {:5.2f}mm." \
                                .format(self.steps, 1000*self.dist_start, 1000*norm(self.goal-self.tip_vec))
          elif new_dist_euclid < self.eps:
             reward = 100
             self.info["goal"] = True
-            self.info["str"] = "GOAL! Distance {:.2f}mm @step {:3d}, total distance covered {:.2f}" \
+            self.info["str"] = "GOAL! Distance {:.2f}mm @step {:3d}, total distance covered {:.2f}mm." \
                                .format(1000*norm(self.goal-self.tip_vec), self.steps, 1000*norm(self.dist_start-self.dist_end))
          elif self.steps >= self.max_steps:
             self.info["str"] = "Max steps {}, distance to goal {:5.2f}mm, total distance covered {:5.2f}mm." \
                                .format(self.max_steps, 1000*self.dist_end, 1000*(self.dist_start-self.dist_end))
 
-#      gamma_t = 1-(self.steps/(self.max_steps+1))
-#      reward = gamma_t*reward
+      gamma_t = 1-(self.steps/(self.max_steps+1))
+      reward = gamma_t*reward
       return reward, done, self.info
 
    def arc_params(self, l1, l2, l3):
@@ -243,7 +253,7 @@ class TendonOneSegmentEnv(Env):
                   (norm(self.tangent_vec) * norm(self.tangent_vec_goal))
       return alpha*180/np.pi if degree else alpha
 
-   def render(self, mode="string", pause=0.0000001, save_frames=False):
+   def render(self, mode="human", pause=0.0000001, save_frames=False):
       """ renders the 3d plot of the robot's arc, pause (float) determines how long each frame is shown
           when save frames is set to True each frame of the plot is saved in an png file"""
       if self.steps % 5 == 0 and mode=="string":

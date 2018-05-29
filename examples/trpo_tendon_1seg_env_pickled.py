@@ -7,6 +7,7 @@ from examples.tendon_1seg_env import TendonOneSegmentEnv
 #import lasagne.nonlinearities as NL
 
 def run_task(*_):
+   """TRY OUT normalized environment"""
    env = normalize(TendonOneSegmentEnv())
 
    policy = GaussianMLPPolicy(
@@ -22,7 +23,7 @@ def run_task(*_):
          policy=policy,
          baseline=baseline,
          batch_size = 4000,
-         max_path_length=100,
+         max_path_length=150,
          n_itr=1500,
          discount=0.99,
          step_size=0.01,
@@ -32,6 +33,7 @@ def run_task(*_):
 run_experiment_lite(
       run_task,
       n_parallel=1,
-      snapshot_mode="last",
+      snapshot_mode="gap",
+      exp_name="test_exp",
       seed=1,
  )

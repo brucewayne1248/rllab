@@ -5,7 +5,7 @@ from rllab.utils.plot_utils import Arrow3D, plot_loop_pause
 
 import numpy as np
 from numpy.linalg import norm
-from math import sqrt, asin, atan2, cos, sin
+from math import sqrt, asin, atan2, cos, sin, acos
 import matplotlib.pyplot as plt
 
 """
@@ -285,6 +285,11 @@ class TendonEnvOneSegment(Env):
             points[i] = np.matmul(self.transformation_matrix(self.kappa, self.phi, s[i]),
                                   np.array([0.0, 0.0, 0.0, 1]))[0:3]
         return points
+
+   def get_diff_angle(self, degree=False):
+      alpha = acos(np.dot(self.tangent_vec, self.tangent_vec_goal)) / \
+                  (norm(self.tangent_vec) * norm(self.tangent_vec_goal))
+      return alpha*180/np.pi if degree else alpha
 
    def init_render(self):
       """ sets up 3d plot """

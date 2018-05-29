@@ -29,7 +29,7 @@ def rollout(env, agent, max_path_length=np.inf, animated=False, speedup=1,
             break
         o = next_o
         if animated:
-            env.render(mode="human")
+            env.render()
             timestep = 0.0005
             time.sleep(timestep / speedup)
 
@@ -44,39 +44,41 @@ def rollout(env, agent, max_path_length=np.inf, animated=False, speedup=1,
         env_infos=tensor_utils.stack_tensor_dict_list(env_infos),
     )
 
-def rollout_tendon(env, agent, max_path_length=np.inf, animated=False, speedup=1,
-                   always_return_paths=False):
+def rollout_tendon(env, agent, always_return_paths=True,
+                   render_mode="", save_frames=False,
+                   lengths=None, goal=None, tangent_vec_goal=None):
+    """adjusted rollout method"""
     observations = []
     actions = []
     rewards = []
     agent_infos = []
     env_infos = []
-    o = env.reset()
-    print("PRINTING OUT THE RESET BIATCH", o)
-    print("PRINTING OUT THE STATE", env._wrapped_env.get_state())
+    # reset environment according to given starting point, and goal, or randomly
+    if lengths is not None and goal is not None and tangent_vec_goal is not None:
+        o = env._wrapped_env.reset(lengths, goal, tangent_vec_goal)
+    elif lengths is None and goal is not None and tangent_vec_goal is not None:
+        o = env._wrapped_env.reset(lengths, goal, tangent_vec_goal)
+    else:
+        o = env.reset()
     agent.reset()
-    path_length = 0
-    if animated:
-        env.render()
-    while path_length < max_path_length:
+    if render_mode:
+        env.render(mode=render_mode, save_frames=save_frames)
+    while True:
         a, agent_info = agent.get_action(o)
         next_o, r, d, env_info = env.step(a)
         observations.append(env.observation_space.flatten(o))
         rewards.append(r)
         actions.append(env.action_space.flatten(a))
         agent_infos.append(agent_info)
-        path_length += 1
+        if render_mode:
+            env.render(mode=render_mode, save_frames=save_frames)
         if d:
             observations.append(env.observation_space.flatten(next_o)) # also append terminal observation
             env_infos.append(env_info) # only append terminal info
             break
         o = next_o
-        if animated:
-            env.render()
-#            timestep = 0.0005
-#            time.sleep(timestep / speedup)
 
-    if animated and not always_return_paths:
+    if not always_return_paths:
         return
 
     return dict(

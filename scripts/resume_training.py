@@ -26,8 +26,10 @@ if __name__ == "__main__":
     # Look for params.json file
     args = parser.parse_args()
     parent_dir = os.path.dirname(os.path.realpath(args.file))
-    json_file_path = os.path.join(parent_dir, "params.json")
-    logger.log("Looking for params.json at %s..." % json_file_path)
+    # json_file_path = os.path.join(parent_dir, "params.json")
+    json_file_path = os.path.join(parent_dir, "variant.json")
+    # logger.log("Looking for params.json at %s..." % json_file_path)
+    logger.log("Looking for variant.json at %s..." % json_file_path) 
     try:
         with open(json_file_path, "r") as f:
             params = json.load(f)
