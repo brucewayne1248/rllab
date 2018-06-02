@@ -329,50 +329,27 @@ class TendonTwoSegmentEnv(Env):
          # delete arrows of previous frame, except base frame
          while len(self.ax.artists) > 3:
              self.ax.artists.pop()
-         # add current frenet or bishop coordinate frame in plot
-         normal_vec1 = self.normal_vec1
-         binormal_vec1 = self.binormal_vec1
-         tangent_vec1 = self.tangent_vec1
-         normal_vec2 = self.normal_vec2
-         binormal_vec2 = self.binormal_vec2
-         tangent_vec2 = self.tangent_vec2
-
-         anormal1 = Arrow3D([self.tip_vec1[0], self.tip_vec1[0]+self.arrow_len*normal_vec1[0]],
-                            [self.tip_vec1[1], self.tip_vec1[1]+self.arrow_len*normal_vec1[1]],
-                            [self.tip_vec1[2], self.tip_vec1[2]+self.arrow_len*normal_vec1[2]],
-                            arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="r")
-         abinormal1 = Arrow3D([self.tip_vec1[0], self.tip_vec1[0]+self.arrow_len*binormal_vec1[0]],
-                              [self.tip_vec1[1], self.tip_vec1[1]+self.arrow_len*binormal_vec1[1]],
-                              [self.tip_vec1[2], self.tip_vec1[2]+self.arrow_len*binormal_vec1[2]],
-                              arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="g")
-         atangent1 = Arrow3D([self.tip_vec1[0], self.tip_vec1[0]+self.arrow_len*tangent_vec1[0]],
-                             [self.tip_vec1[1], self.tip_vec1[1]+self.arrow_len*tangent_vec1[1]],
-                             [self.tip_vec1[2], self.tip_vec1[2]+self.arrow_len*tangent_vec1[2]],
-                             arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="b")
+         # add coordinate frames to plot
+         anormal1 = self.create_arrow(self.tip_vec1, self.normal_vec1, self.arrow_len,
+                                      "-|>", self.arrow_lw, self.arrow_ms, c="r")
+         abinormal1 = self.create_arrow(self.tip_vec1, self.binormal_vec1, self.arrow_len,
+                                        "-|>", self.arrow_lw, self.arrow_ms, c="g")
+         atangent1 = self.create_arrow(self.tip_vec1, self.tangent_vec1, self.arrow_len,
+                                       "-|>", self.arrow_lw, self.arrow_ms, c="b")
+         anormal2 = self.create_arrow(self.tip_vec2, self.normal_vec2, self.arrow_len,
+                                      "-|>", self.arrow_lw, self.arrow_ms, c="r")
+         abinormal2 = self.create_arrow(self.tip_vec2, self.binormal_vec2, self.arrow_len,
+                                        "-|>", self.arrow_lw, self.arrow_ms, c="g")
+         atangent2 = self.create_arrow(self.tip_vec2, self.tangent_vec2, self.arrow_len,
+                                       "-|>", self.arrow_lw, self.arrow_ms, c="b")
          self.ax.add_artist(anormal1)
          self.ax.add_artist(abinormal1)
          self.ax.add_artist(atangent1)
-         anormal2 = Arrow3D([self.tip_vec2[0], self.tip_vec2[0]+self.arrow_len*normal_vec2[0]],
-                            [self.tip_vec2[1], self.tip_vec2[1]+self.arrow_len*normal_vec2[1]],
-                            [self.tip_vec2[2], self.tip_vec2[2]+self.arrow_len*normal_vec2[2]],
-                            arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="r")
-         abinormal2 = Arrow3D([self.tip_vec2[0], self.tip_vec2[0]+self.arrow_len*binormal_vec2[0]],
-                              [self.tip_vec2[1], self.tip_vec2[1]+self.arrow_len*binormal_vec2[1]],
-                              [self.tip_vec2[2], self.tip_vec2[2]+self.arrow_len*binormal_vec2[2]],
-                              arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="g")
-         atangent2 = Arrow3D([self.tip_vec2[0], self.tip_vec2[0]+self.arrow_len*tangent_vec2[0]],
-                             [self.tip_vec2[1], self.tip_vec2[1]+self.arrow_len*tangent_vec2[1]],
-                             [self.tip_vec2[2], self.tip_vec2[2]+self.arrow_len*tangent_vec2[2]],
-                             arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="b")
          self.ax.add_artist(anormal2)
          self.ax.add_artist(abinormal2)
          self.ax.add_artist(atangent2)
-
-         # tangent vector indicating orientation of goal point
-         atangent_goal = Arrow3D([self.goal[0], self.goal[0]+self.arrow_len*self.tangent_vec_goal[0]],
-                                 [self.goal[1], self.goal[1]+self.arrow_len*self.tangent_vec_goal[1]],
-                                 [self.goal[2], self.goal[2]+self.arrow_len*self.tangent_vec_goal[2]],
-                                 arrowstyle="fancy", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="cyan")
+         atangent_goal = self.create_arrow(self.goal, self.tangent_vec_goal, self.arrow_len,
+                                           "-|>", self.arrow_lw, self.arrow_ms, c="b")
          self.ax.add_artist(atangent_goal)
          plot_loop_pause(pause) # updates plot without losing focus
          if save_frames == True:
@@ -391,6 +368,13 @@ class TendonTwoSegmentEnv(Env):
          T02_s = np.matmul(self.T01, self.transformation_matrix(self.kappa2, self.phi2, s2[i]))
          points2[i] = np.matmul(T02_s, self.base)[0:3]
       return points1, points2
+
+   def create_arrow(self, start_vec, dir_vec, alen, astyle, alw, ams, c):
+      a = Arrow3D([start_vec[0], start_vec[0]+alen*dir_vec[0]],
+                  [start_vec[1], start_vec[1]+alen*dir_vec[1]],
+                  [start_vec[2], start_vec[2]+alen*dir_vec[2]],
+                  arrowstyle=astyle, lw=alw, mutation_scale=ams, color=c)
+      return a
 
    def init_render(self):
       """ sets up 3d plot """
@@ -421,8 +405,17 @@ class TendonTwoSegmentEnv(Env):
       self.fig.tight_layout() # fits the plot to window size
 
 #env = TendonTwoSegmentEnv()
-#env.reset([0.1, 0.1, 0.1, 0.2, 0.2, 0.2], [0, 0, 0.235], [0.0, 0.0, 1.0])
-#
+##env.reset([0.1, 0.1, 0.1, 0.2, 0.2, 0.2], [0, 0, 0.235], [0.0, 0.0, 1.0])
+#env.reset([0.085, 0.115, 0.1115, 0.2,0.2,0.2])
+#i = 0
+#while i < 20:
+##   s, r, done, info =env.step(np.random.uniform(-env.delta_l, env.delta_l, 6))
+#   s, r, done, info =env.step([-0.001, -0.001, -0.001, 0.0, 0.0, 0.0])
+#   env.render(mode="human")
+#   if done :
+#      i += 1
+
+
 #for i in range(30):
 ##   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.001, -0.001, -0.001])
 #   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.00, -0.00, -0.00])

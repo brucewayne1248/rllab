@@ -276,31 +276,19 @@ class TendonOneSegmentEnv(Env):
          # delete arrows of previous frame, except base frame
          while len(self.ax.artists) > 3:
              self.ax.artists.pop()
-         # add current frenet or bishop coordinate frame in plot
-         normal_vec = self.normal_vec
-         binormal_vec = self.binormal_vec
-         tangent_vec = self.tangent_vec
-
-         anormal = Arrow3D([self.tip_vec[0], self.tip_vec[0]+self.arrow_len*normal_vec[0]],
-                           [self.tip_vec[1], self.tip_vec[1]+self.arrow_len*normal_vec[1]],
-                           [self.tip_vec[2], self.tip_vec[2]+self.arrow_len*normal_vec[2]],
-                           arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="r")
-         abinormal = Arrow3D([self.tip_vec[0], self.tip_vec[0]+self.arrow_len*binormal_vec[0]],
-                             [self.tip_vec[1], self.tip_vec[1]+self.arrow_len*binormal_vec[1]],
-                             [self.tip_vec[2], self.tip_vec[2]+self.arrow_len*binormal_vec[2]],
-                             arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="g")
-         atangent = Arrow3D([self.tip_vec[0], self.tip_vec[0]+self.arrow_len*tangent_vec[0]],
-                            [self.tip_vec[1], self.tip_vec[1]+self.arrow_len*tangent_vec[1]],
-                            [self.tip_vec[2], self.tip_vec[2]+self.arrow_len*tangent_vec[2]],
-                            arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="b")
+         # coordinate frame to plot
+         anormal = self.create_arrow(self.tip_vec, self.normal_vec, self.arrow_len,
+                                     "-|>", self.arrow_lw, self.arrow_ms, c="r")
+         abinormal = self.create_arrow(self.tip_vec, self.binormal_vec, self.arrow_len,
+                                       "-|>", self.arrow_lw, self.arrow_ms, c="g")
+         atangent = self.create_arrow(self.tip_vec, self.tangent_vec, self.arrow_len,
+                                      "-|>", self.arrow_lw, self.arrow_ms, c="b")
          self.ax.add_artist(anormal)
          self.ax.add_artist(abinormal)
          self.ax.add_artist(atangent)
          # tangent vector indicating orientation of goal point
-         atangent_goal = Arrow3D([self.goal[0], self.goal[0]+self.arrow_len*self.tangent_vec_goal[0]],
-                                 [self.goal[1], self.goal[1]+self.arrow_len*self.tangent_vec_goal[1]],
-                                 [self.goal[2], self.goal[2]+self.arrow_len*self.tangent_vec_goal[2]],
-                                 arrowstyle="fancy", lw=self.arrow_lw, mutation_scale=0.75*self.arrow_ms, color="cyan")
+         atangent_goal = self.create_arrow(self.goal, self.tangent_vec_goal, self.arrow_len,
+                                           "-|>", self.arrow_lw, self.arrow_ms, c="b")
          self.ax.add_artist(atangent_goal)
          plot_loop_pause(pause) # updates plot without losing focus
          if save_frames == True:
@@ -316,6 +304,13 @@ class TendonOneSegmentEnv(Env):
                                np.array([0.0, 0.0, 0.0, 1]))[0:3]
       return points
 
+   def create_arrow(self, start_vec, dir_vec, alen, astyle, alw, ams, c):
+      a = Arrow3D([start_vec[0], start_vec[0]+alen*dir_vec[0]],
+                  [start_vec[1], start_vec[1]+alen*dir_vec[1]],
+                  [start_vec[2], start_vec[2]+alen*dir_vec[2]],
+                  arrowstyle=astyle, lw=alw, mutation_scale=ams, color=c)
+      return a
+
    def init_render(self):
       """ sets up 3d plot """
       plt.ion() # interactive plot mode, panning, zooming enabled
@@ -329,9 +324,11 @@ class TendonOneSegmentEnv(Env):
       self.ax.set_ylabel("y in [m]")
       self.ax.set_zlabel("z in [m]")
       # add coordinate 3 arrows of base frame, have to be defined once!
-      self.arrow_len = 0.02
-      self.arrow_lw = 1
-      self.arrow_ms = 10
+
+      self.arrow_len = 0.02 # arrow length
+      self.arrow_lw = 1 # arrow line width
+      self.arrow_ms = 10 # arrow mutation scale
+
       ax_base = Arrow3D([0.0, self.arrow_len], [0.0, 0.0], [0.0, 0.0],
                         arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="r")
       ay_base = Arrow3D([0.0, 0.0], [0.0, self.arrow_len], [0.0, 0.0],
@@ -346,17 +343,16 @@ class TendonOneSegmentEnv(Env):
 
 #diffs10_5 = []
 #env = TendonOneSegmentEnv()
-#env.reset()
+#env.reset([0.085, 0.1, 0.1])
 #episodes = 10000
 #for episode in range(episodes):
+#   state, reward, done, info = env.step(-env.delta_l*np.ones(3))
 ##   state, reward, done, info = env.step(np.random.uniform(-env.delta_l, env.delta_l, 3))
-##   state, reward, done, info = env.step(env.delta_l*np.ones(3))
-#   state, reward, done, info = env.step(np.random.uniform(-env.delta_l, env.delta_l, 3))
-##   env.render(mode="human")
+#   env.render(mode="human", pause=0.5)
 #   if done:
 #      episode += 1
 #      env.reset()
-#
+##
 #print("MEAN", np.mean(np.array(diffs10_5)))
 #print("MAX", np.max(np.array(diffs10_5)))
 #print("MIN", np.min(np.array(diffs10_5)))
