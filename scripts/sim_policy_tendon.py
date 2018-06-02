@@ -10,23 +10,25 @@ import pickle
 import numpy as np
 from rllab.sampler.utils import rollout_tendon
 
+
 def retry_ep(goal, tangent_vec_goal, max_retries, verbose=False):
     lengths = None
     for retry in range(max_retries):
 #        print(vars(env._wrapped_env))
         path = rollout_tendon(env, policy, always_return_paths=True,
                               #render_mode=args.render_mode,
-                              render_mode="",
-                              save_frames=0,
+                              render_mode="human",
+                              save_frames=1,
                               lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
 
         if env._wrapped_env.dist_end < env._wrapped_env.eps: break
 
-    print("lenghts1", env._wrapped_env.lengths1)
-    print("lenghts2", env._wrapped_env.lengths2)
-    print("tip1", env._wrapped_env.tip_vec1)
-    print("tip2", env._wrapped_env.tip_vec2)
-    print("phi1", env._wrapped_env.phi1)
+#    print("lenghts1", env._wrapped_env.lengths1)
+#    print("lenghts2", env._wrapped_env.lengths2)
+#    print("tip1", env._wrapped_env.tip_vec1)
+#    print("tip2", env._wrapped_env.tip_vec2)
+#    print("phi1", env._wrapped_env.phi1)
+    print(vars(env._wrapped_env))
     if env._wrapped_env.dist_end < env._wrapped_env.eps: # goal reached
         if verbose: print("Goal reached after {} retries.".format(retry+1))
 #        print(vars(env._wrapped_env), sep='\n')
@@ -86,9 +88,28 @@ if __name__ == "__main__":
         env = data['env'] # wrapped env, access TendonOneSegmentEnv with env._wrapped_env
         lengths=None; goal=None; tangent_vec_goal=None
 
+        printenv = env
+        printenv_wrapped = env._wrapped_env
+
+        print(vars(policy))
         print(vars(env))
-        print(vars(env._wrapped_env))
-        print(dir(env._wrapped_env))
+        print(env._wrapped_env.__dict__)
+        print(policy._cached_param_shapes)
+        print(env._Serializable__args)
+        print("lmin:", printenv_wrapped.lmin)
+        print("lmax:", printenv_wrapped.lmax)
+#        print("l1min:", printenv_wrapped.l1min)
+#        print("l1max:", printenv_wrapped.l1max)
+#        print("l2min:", printenv_wrapped.l2min)
+#        print("l2max:", printenv_wrapped.l2max)
+        print("d:", printenv_wrapped.d)
+        print("n:", printenv_wrapped.n)
+        print("state:", printenv_wrapped._state)
+#        print("n_states:", len(printenv_wrapped._state))
+        print("delta_l:", printenv_wrapped.delta_l)
+        print("max_steps:", printenv_wrapped.max_steps)
+        print("eps:", printenv_wrapped.eps)
+
 
         while episode < total_episodes:
             if test_data is not None: # set starting lengths and goal according to test batch
@@ -101,7 +122,8 @@ if __name__ == "__main__":
                                   save_frames=args.save_frames,
                                   lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
 
-            if env._wrapped_env.dist_end < env._wrapped_env.eps: # goal reached
+            if path["env_infos"]["info"]["goal"] == True: # goal reached
+#            if env._wrapped_env.dist_end < env._wrapped_env.eps: # goal reached
                 if args.analyze:
                     ep_lens_goal_reached.append(env._wrapped_env.steps)
                     diff_angles.append(env._wrapped_env.get_diff_angle(degree=True))
@@ -126,5 +148,5 @@ if __name__ == "__main__":
             print("Goals reached {:3d}/{:3d}".format(goals_reached, total_episodes))
             print("Goals reached after retries {:3d}/{:3d}".format(goals_reached+goals_reached_after_retries, total_episodes))
             print("Average steps needed to reach goal: {:5.1f}.".format(sum(ep_lens_goal_reached)/(len(ep_lens_goal_reached)+eps)))
-            print("Average angle difference when goal reached: {:5.2f}°.".format(sum(diff_angles)/(len(diff_angles)+eps)))
             print("Average min distance from goal within one episode, when goal not reached: {:5.2f}mm.".format(1000*sum(dist_mins)/(len(dist_mins)+eps)))
+            print("Average angle difference when goal reached: {:5.2f}°.".format(sum(diff_angles)/(len(diff_angles)+eps)))

@@ -33,11 +33,11 @@ def run_task(v):
     algo.train()
 
 
-for step_size in [0.01, 0.05, 0.1]:
-    for seed in [1, 11, 21, 31, 41]:
+for step_size in [0.01, 0.05]:
+    for seed in [1, 11]:
         run_experiment_lite(
             run_task,
-            exp_prefix="first_exp",
+            exp_prefix="first_exp2",
             # Number of parallel workers for sampling
             n_parallel=1,
             # Only keep the snapshot parameters for the last iteration

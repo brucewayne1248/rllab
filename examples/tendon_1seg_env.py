@@ -32,7 +32,7 @@ class TendonOneSegmentEnv(Env):
       self.lmin = 0.085
       self.lmax = 0.115
       self.d = 0.01
-      self.n = 5
+      self.n = 10
 
       self.l1 = None; self.l2 = None; self.l3 = None; # tendon lengths
       self.lengths = None # [l1, l2, l3]
@@ -129,6 +129,7 @@ class TendonOneSegmentEnv(Env):
          self.total_episodes += 1
          if "GOAL" in self.info['str']:
             self.total_goals_reached += 1
+         if self.total_episodes % 100 == 0:
             print("-->{}/{} goals reached.".format(self.total_goals_reached, self.total_episodes))
 
       next_observeration = np.copy(self._state)
@@ -139,6 +140,7 @@ class TendonOneSegmentEnv(Env):
       goal coordinates, euclidean distance to goal"""
       return np.array([self.l1, self.l2, self.l3, self.tip_vec[0], self.tip_vec[1], self.tip_vec[2],
                        self.goal[0], self.goal[1], self.goal[2], norm(self.goal-self.tip_vec)])
+#      return np.array([self.l1, self.l2, self.l3, self.goal[0], self.goal[1], self.goal[2], norm(self.goal-self.tip_vec)])
 
    def update_workspace(self):
       """updates configuration and work space variables after changing tendon lengths"""
@@ -187,7 +189,7 @@ class TendonOneSegmentEnv(Env):
 #      reward = -gamma*((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
       """R5"""
 #      reward = -((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
-      """R6 leave out gamma_t"""
+      """R6 like R5 leave out gamma_t"""
 
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(new_dist_euclid-old_dist_euclid))
@@ -234,6 +236,7 @@ class TendonOneSegmentEnv(Env):
       if l1 == l2 == l3 or expr == 0.0: # handling the singularity
          seg_len = lsum / 3
       else:
+
          seg_len = self.n*self.d*lsum / sqrt(expr) * asin(sqrt(expr)/(3*self.n*self.d))
       return kappa, phi, seg_len
 
@@ -267,7 +270,7 @@ class TendonOneSegmentEnv(Env):
          while self.ax.lines:
              self.ax.lines.pop() # delete plots of previous frame
          self.ax.plot(points[:,0], points[:,1], points[:,2], label="Segment 1", c="black", linewidth=4)
-         self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], linestyle=None, label="Ziel", c="magenta", marker="*", markersize=8)
+         self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], linestyle=None, label="Ziel", c="magenta", marker="x", markersize=8)
          self.ax.legend()
 
          # delete arrows of previous frame, except base frame
@@ -322,9 +325,9 @@ class TendonOneSegmentEnv(Env):
       self.ax.set_xlim([-0.5*self.lmax, 0.5*self.lmax])
       self.ax.set_ylim([-0.5*self.lmax, 0.5*self.lmax])
       self.ax.set_zlim([0.0, self.lmax])
-      self.ax.set_xlabel("X [m]")
-      self.ax.set_ylabel("Y [m]")
-      self.ax.set_zlabel("Z [m]")
+      self.ax.set_xlabel("x in [m]")
+      self.ax.set_ylabel("y in [m]")
+      self.ax.set_zlabel("z in [m]")
       # add coordinate 3 arrows of base frame, have to be defined once!
       self.arrow_len = 0.02
       self.arrow_lw = 1
@@ -341,12 +344,19 @@ class TendonOneSegmentEnv(Env):
       plt.show() # display figure and bring focus (once) to plotting window
       self.fig.tight_layout() # fits the plot to window size
 
-#env = TendonEnvOneSegment()
+#diffs10_5 = []
+#env = TendonOneSegmentEnv()
 #env.reset()
-#
-#while True:
+#episodes = 10000
+#for episode in range(episodes):
+##   state, reward, done, info = env.step(np.random.uniform(-env.delta_l, env.delta_l, 3))
+##   state, reward, done, info = env.step(env.delta_l*np.ones(3))
 #   state, reward, done, info = env.step(np.random.uniform(-env.delta_l, env.delta_l, 3))
-#   env.render(mode="human")
-#
+##   env.render(mode="human")
 #   if done:
-#      break
+#      episode += 1
+#      env.reset()
+#
+#print("MEAN", np.mean(np.array(diffs10_5)))
+#print("MAX", np.max(np.array(diffs10_5)))
+#print("MIN", np.min(np.array(diffs10_5)))

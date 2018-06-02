@@ -5,6 +5,7 @@ from rllab.misc.instrument import run_experiment_lite
 from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
 from examples.tendon_1seg_env import TendonOneSegmentEnv
 #import lasagne.nonlinearities as NL
+import numpy as np
 
 def run_task(*_):
    """TRY OUT normalized environment"""
@@ -23,8 +24,8 @@ def run_task(*_):
          policy=policy,
          baseline=baseline,
          batch_size = 4000,
-         max_path_length=150,
-         n_itr=1500,
+         max_path_length=np.inf,
+         n_itr=20001,
          discount=0.99,
          step_size=0.01,
    )
@@ -34,6 +35,7 @@ run_experiment_lite(
       run_task,
       n_parallel=1,
       snapshot_mode="gap",
-      exp_name="test_exp",
+      snapshot_gap=100,
+      exp_name="s1_r3_a04_h64_T100_dl1_qxgd_itrmax20000_n10",
       seed=1,
  )
