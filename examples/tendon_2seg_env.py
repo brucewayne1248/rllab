@@ -27,7 +27,7 @@ class TendonTwoSegmentEnv(Env):
       self.l2min = 0.18
       self.l2max = 0.22
       self.d = 0.01
-      self.n = 5
+      self.n = 10
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
