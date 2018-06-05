@@ -33,7 +33,7 @@ def run_task(*_):
 run_experiment_lite(
       run_task,
       n_parallel=1,
-      exp_name="s2_r5_a04_h64_T100_dl1_itrmax20000_newlimits_n10",
+      exp_name="s2_r5_a04_h64_T100_dl1_itrmax20000_newlimits_n10_newactuation",
       snapshot_mode="gap",
       snapshot_gap=100,
       seed=1,

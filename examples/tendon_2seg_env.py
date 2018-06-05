@@ -181,22 +181,22 @@ class TendonTwoSegmentEnv(Env):
    def take_action(self, action):
       """executes action at timestep t, and updates configuration/work space
       as well as distance variables"""
-      self.l11 += action[0]; self.l12 += action[1]; self.l13 += action[2]
-      self.l21 += action[3]; self.l22 += action[4]; self.l23 += action[5]
-      # make sure tendon lengths are within min, max
-      lengths1 = [self.l11, self.l12, self.l13]
-      for i in range(len(lengths1)):
-         if lengths1[i] < self.l1min:
-            lengths1[i] = self.l1min
-         elif lengths1[i] > self.l1max:
-            lengths1[i] = self.l1max
+      l11 = self.l11; l12 = self.l12; l13 = self.l13
+      l11 += action[0]; l12 += action[1]; l13 += action[2]
+      lengths1 = [l11, l12, l13] # make sure actuator limits are not exceeded
+      lengths1 = [self.l1min if l < self.l1min else l for l in lengths1]
+      lengths1 = [self.l1max if l > self.l1max else l for l in lengths1]
+      # calculate the actual change of tendon lenghts for first segment
+      a0_actual = lengths1[0]-self.l11; a1_actual = lengths1[1]-self.l12; a2_actual = lengths1[2]-self.l13
       self.l11 = lengths1[0]; self.l12 = lengths1[1]; self.l13 = lengths1[2]
+
+      self.l21 += a0_actual; self.l22 += a1_actual; self.l23 += a2_actual # apply actual tendon change of segment 1 to segment 2
+      self.l21 += action[3]; self.l22 += action[4]; self.l23 += action[5] # apply action to segment 2
+
+      # make sure tendon lengths for segment 2 are within min, max
       lengths2 = [self.l21, self.l22, self.l23]
-      for i in range(len(lengths2)):
-         if lengths2[i] < self.l2min:
-            lengths2[i] = self.l2min
-         elif lengths2[i] > self.l2max:
-            lengths2[i] = self.l2max
+      lengths2 = [self.l2min if l < self.l2min else l for l in lengths2]
+      lengths2 = [self.l2max if l > self.l2max else l for l in lengths2]
       self.l21 = lengths2[0]; self.l22 = lengths2[1]; self.l23 = lengths2[2]
 
       self.old_dist_vec = self.goal-self.tip_vec2
@@ -405,17 +405,19 @@ class TendonTwoSegmentEnv(Env):
       self.fig.tight_layout() # fits the plot to window size
 
 #env = TendonTwoSegmentEnv()
-##env.reset([0.1, 0.1, 0.1, 0.2, 0.2, 0.2], [0, 0, 0.235], [0.0, 0.0, 1.0])
-#env.reset([0.085, 0.115, 0.1115, 0.2,0.2,0.2])
+#env.reset([0.1, 0.1, 0.1, 0.2, 0.2, 0.2], [0, 0, 0.235], [0.0, 0.0, 1.0])
+##env.reset([0.085, 0.115, 0.1115, 0.2,0.2,0.2])
 #i = 0
-#while i < 20:
+#while True:
 ##   s, r, done, info =env.step(np.random.uniform(-env.delta_l, env.delta_l, 6))
-#   s, r, done, info =env.step([-0.001, -0.001, -0.001, 0.0, 0.0, 0.0])
-#   env.render(mode="human")
-#   if done :
-#      i += 1
-
-
+#   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.0, 0.0, 0.0])
+#   env.render(mode="human", pause = 0.001)
+##   i += 1
+#i= 0
+#while i < 10:
+#   s, r, done, info = env.step([0.0, 0.0, 0.0, 0.001, -0.001, -0.001])
+#   env.render(mode="human", pause = 1)
+#   i += 1
 #for i in range(30):
 ##   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.001, -0.001, -0.001])
 #   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.00, -0.00, -0.00])
