@@ -24,10 +24,11 @@ class TendonTwoSegmentEnv(Env):
    def __init__(self):
       self.l1min = 0.085
       self.l1max = 0.115
-      self.l2min = 0.18
-      self.l2max = 0.22
+      self.l2min = 0.185
+      self.l2max = 0.215
       self.d = 0.01
       self.n = 10
+      self.dependent_actuation = False # indicates the way change of tendon lenghts interact with robot
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -181,23 +182,34 @@ class TendonTwoSegmentEnv(Env):
    def take_action(self, action):
       """executes action at timestep t, and updates configuration/work space
       as well as distance variables"""
-      l11 = self.l11; l12 = self.l12; l13 = self.l13
-      l11 += action[0]; l12 += action[1]; l13 += action[2]
-      lengths1 = [l11, l12, l13] # make sure actuator limits are not exceeded
-      lengths1 = [self.l1min if l < self.l1min else l for l in lengths1]
-      lengths1 = [self.l1max if l > self.l1max else l for l in lengths1]
-      # calculate the actual change of tendon lenghts for first segment
-      a0_actual = lengths1[0]-self.l11; a1_actual = lengths1[1]-self.l12; a2_actual = lengths1[2]-self.l13
-      self.l11 = lengths1[0]; self.l12 = lengths1[1]; self.l13 = lengths1[2]
-
-      self.l21 += a0_actual; self.l22 += a1_actual; self.l23 += a2_actual # apply actual tendon change of segment 1 to segment 2
-      self.l21 += action[3]; self.l22 += action[4]; self.l23 += action[5] # apply action to segment 2
-
-      # make sure tendon lengths for segment 2 are within min, max
-      lengths2 = [self.l21, self.l22, self.l23]
-      lengths2 = [self.l2min if l < self.l2min else l for l in lengths2]
-      lengths2 = [self.l2max if l > self.l2max else l for l in lengths2]
-      self.l21 = lengths2[0]; self.l22 = lengths2[1]; self.l23 = lengths2[2]
+      if self.dependent_actuation: # this is what i like
+         self.l11 += action[0]; self.l12 += action[1]; self.l13 += action[2]
+         self.l21 += action[3]; self.l22 += action[4]; self.l23 += action[5]
+         # make sure tendon lengths are within min, max
+         lengths1 = [self.l11, self.l12, self.l13]
+         lengths1 = [self.l1min if l < self.l1min else l for l in lengths1]
+         lengths1 = [self.l1max if l > self.l1max else l for l in lengths1]
+         self.l11 = lengths1[0]; self.l12 = lengths1[1]; self.l13 = lengths1[2]
+         lengths2 = [self.l21, self.l22, self.l23]
+         lengths2 = [self.l2min if l < self.l2min else l for l in lengths2]
+         lengths2 = [self.l2max if l > self.l2max else l for l in lengths2]
+         self.l21 = lengths2[0]; self.l22 = lengths2[1]; self.l23 = lengths2[2]
+      else:
+         l11 = self.l11; l12 = self.l12; l13 = self.l13
+         l11 += action[0]; l12 += action[1]; l13 += action[2]
+         lengths1 = [l11, l12, l13] # make sure actuator limits are not exceeded
+         lengths1 = [self.l1min if l < self.l1min else l for l in lengths1]
+         lengths1 = [self.l1max if l > self.l1max else l for l in lengths1]
+         # calculate the actual change of tendon lenghts for first segment
+         a0_actual = lengths1[0]-self.l11; a1_actual = lengths1[1]-self.l12; a2_actual = lengths1[2]-self.l13
+         self.l11 = lengths1[0]; self.l12 = lengths1[1]; self.l13 = lengths1[2]
+         self.l21 += a0_actual; self.l22 += a1_actual; self.l23 += a2_actual # apply actual tendon change of segment 1 to segment 2
+         self.l21 += action[3]; self.l22 += action[4]; self.l23 += action[5] # apply action to segment 2
+         # make sure tendon lengths for segment 2 are within min, max
+         lengths2 = [self.l21, self.l22, self.l23]
+         lengths2 = [self.l2min if l < self.l2min else l for l in lengths2]
+         lengths2 = [self.l2max if l > self.l2max else l for l in lengths2]
+         self.l21 = lengths2[0]; self.l22 = lengths2[1]; self.l23 = lengths2[2]
 
       self.old_dist_vec = self.goal-self.tip_vec2
       self.old_dist_euclid = norm(self.old_dist_vec)
@@ -308,7 +320,7 @@ class TendonTwoSegmentEnv(Env):
                   (norm(self.tangent_vec2) * norm(self.tangent_vec_goal))
       return alpha*180/np.pi if degree else alpha
 
-   def render(self, mode="string", pause=0.0000001, save_frames=False):
+   def render(self, mode="human", pause=0.0000001, save_frames=False):
       """ renders the 3d plot of the robot's arc, pause (float) determines how long each frame is shown
           when save frames is set to True each frame of the plot is saved in an png file"""
       if self.steps % 5 == 0 and mode=="string":
@@ -370,6 +382,7 @@ class TendonTwoSegmentEnv(Env):
       return points1, points2
 
    def create_arrow(self, start_vec, dir_vec, alen, astyle, alw, ams, c):
+      """Returns a 3D arrow pointing to dir_vec from start_vec. dir_vec should be a unit vector"""
       a = Arrow3D([start_vec[0], start_vec[0]+alen*dir_vec[0]],
                   [start_vec[1], start_vec[1]+alen*dir_vec[1]],
                   [start_vec[2], start_vec[2]+alen*dir_vec[2]],
@@ -407,13 +420,32 @@ class TendonTwoSegmentEnv(Env):
 #env = TendonTwoSegmentEnv()
 #env.reset([0.1, 0.1, 0.1, 0.2, 0.2, 0.2], [0, 0, 0.235], [0.0, 0.0, 1.0])
 ##env.reset([0.085, 0.115, 0.1115, 0.2,0.2,0.2])
-#i = 0
+##i = 0
 #while True:
 ##   s, r, done, info =env.step(np.random.uniform(-env.delta_l, env.delta_l, 6))
-#   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.0, 0.0, 0.0])
-#   env.render(mode="human", pause = 0.001)
-##   i += 1
+#   s, r, done, info =env.step([0.001, 0.00, 0.00, 0.0, 0.0, 0.0])
+#   env.render(mode="human", pause = 0.2)
+#   i += 1
 #i= 0
+#for i in range(3):
+#   action =np.zeros(6)
+#   action[i] = 0.001
+#   for i in range(15):
+#      s, r, done, info = env.step(action)
+#      print("action \t\t", action)
+#      print("lengths1 \t", env.lengths1,"\nlengths2 \t", env.lengths2, "\neffective\t", [env.dl21, env.dl22, env.dl23])
+#      env.render(mode="human", pause=0.25)
+#
+#for i in range(3):
+#   action =np.zeros(6)
+#   action[i+3] = -0.001
+#   for i in range(30):
+#      s, r, done, info = env.step(action)
+#      print("action \t\t", action)
+#      print("lengths1 \t", env.lengths1,"\nlengths2 \t", env.lengths2, "\neffective\t", [env.dl21, env.dl22, env.dl23])
+#      env.render(mode="human", pause=1)
+#      env.render(mode="human", pause=2.5)
+
 #while i < 10:
 #   s, r, done, info = env.step([0.0, 0.0, 0.0, 0.001, -0.001, -0.001])
 #   env.render(mode="human", pause = 1)

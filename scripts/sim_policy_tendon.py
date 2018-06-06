@@ -1,15 +1,31 @@
 import argparse
-
+import sys
 import joblib
 import tensorflow as tf
 import pickle
 
-#from examples.tendon_1seg_env import TendonOneSegmentEnv
-#from examples.tendon_2seg_env import TendonTwoSegmentEnv
-#from math import acos
 import numpy as np
 from rllab.sampler.utils import rollout_tendon
 
+def print_env_info(env, env_wrapped):
+   print(vars(env))
+   print(env_wrapped.__dict__)
+   print(env._Serializable__args)
+   if hasattr(env_wrapped, 'lmin'):
+      print("lmin:", env_wrapped.lmin)
+      print("lmax:", env_wrapped.lmax)
+   else:
+     print("l1min:", env_wrapped.l1min)
+     print("l1max:", env_wrapped.l1max)
+     print("l2min:", env_wrapped.l2min)
+     print("l2max:", env_wrapped.l2max)
+   print("d:", env_wrapped.d)
+   print("n:", env_wrapped.n)
+   print("state:", env_wrapped._state)
+   print("delta_l:", env_wrapped.delta_l)
+   print("max_steps:", env_wrapped.max_steps)
+   print("eps:", env_wrapped.eps)
+   print("goals: {}/{}".format(env_wrapped.total_goals_reached, env_wrapped.total_episodes))
 
 def retry_ep(goal, tangent_vec_goal, max_retries, verbose=False):
     lengths = None
@@ -47,6 +63,8 @@ if __name__ == "__main__":
                         help='Integer indicating how many retries one episode should have \
                         to same goal with different starting position, in case goal is not reached:\
                         0 - no retries; n+ - max of n retries')
+    parser.add_argument('--dependent_actuation', type=int, default=1,
+                        help='Indicating the robot is actuated, 0 or 1 accepted values')
     args = parser.parse_args()
 
     # If the snapshot file use tensorflow, do:
@@ -77,29 +95,16 @@ if __name__ == "__main__":
         env = data['env'] # wrapped env, access TendonOneSegmentEnv with env._wrapped_env
         lengths=None; goal=None; tangent_vec_goal=None
 
-        printenv = env
-        printenv_wrapped = env._wrapped_env
-
-        print(vars(policy))
-        print(vars(env))
-        print(env._wrapped_env.__dict__)
+        print(env._wrapped_env.max_steps)
+#        print(vars(policy))
         print(policy._cached_param_shapes)
-        print(env._Serializable__args)
-#        print("lmin:", printenv_wrapped.lmin)
-#        print("lmax:", printenv_wrapped.lmax)
-#        print("l1min:", printenv_wrapped.l1min)
-#        print("l1max:", printenv_wrapped.l1max)
-#        print("l2min:", printenv_wrapped.l2min)
-#        print("l2max:", printenv_wrapped.l2max)
-        print("d:", printenv_wrapped.d)
-        print("n:", printenv_wrapped.n)
-        print("state:", printenv_wrapped._state)
-#        print("n_states:", len(printenv_wrapped._state))
-        print("delta_l:", printenv_wrapped.delta_l)
-        print("max_steps:", printenv_wrapped.max_steps)
-        print("eps:", printenv_wrapped.eps)
-        print("goals: {}/{}".format(printenv_wrapped.total_goals_reached, printenv_wrapped.total_episodes))
+        print_env_info(env, env._wrapped_env)
 
+        if hasattr(env._wrapped_env, "dependent_actuation"):
+           pass
+        else:
+           env._wrapped_env.dependent_actuation = args.dependent_actuation
+           print("Created depenpent_actuation attribute for Tendon Env.")
 
         while episode < total_episodes:
             if test_data is not None: # set starting lengths and goal according to test batch
@@ -128,7 +133,6 @@ if __name__ == "__main__":
                                              env._wrapped_env.tangent_vec_goal,
                                              args.retry, verbose=True)
                 goals_reached_after_retries += goal_reached_retry
-#                break
 
             episode += 1
 
