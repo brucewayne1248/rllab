@@ -28,7 +28,7 @@ class TendonTwoSegmentEnv(Env):
       self.l2max = 0.215
       self.d = 0.01
       self.n = 10
-      self.dependent_actuation = False # indicates the way change of tendon lenghts interact with robot
+      self.dependent_actuation = True # I like dependent! indicates the way change of tendon lenghts interact with robot
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -61,7 +61,7 @@ class TendonTwoSegmentEnv(Env):
       self.new_dist_euclid = None # euclid dist to goal at time step t+1 after taking action a_t
 
       self.fig = None # fig variable used for plotting
-      self.frame = 10000
+      self.frame = 10000 # used to name frames when save_frames is active in render()
 
       # variables needed in episodic reinforcement learning
       self._state = None # state vector containing l1, l2, l3, tip position, and goal position
@@ -194,7 +194,7 @@ class TendonTwoSegmentEnv(Env):
          lengths2 = [self.l2min if l < self.l2min else l for l in lengths2]
          lengths2 = [self.l2max if l > self.l2max else l for l in lengths2]
          self.l21 = lengths2[0]; self.l22 = lengths2[1]; self.l23 = lengths2[2]
-      else:
+      else: # independent acutation
          l11 = self.l11; l12 = self.l12; l13 = self.l13
          l11 += action[0]; l12 += action[1]; l13 += action[2]
          lengths1 = [l11, l12, l13] # make sure actuator limits are not exceeded
@@ -202,7 +202,7 @@ class TendonTwoSegmentEnv(Env):
          lengths1 = [self.l1max if l > self.l1max else l for l in lengths1]
          # calculate the actual change of tendon lenghts for first segment
          a0_actual = lengths1[0]-self.l11; a1_actual = lengths1[1]-self.l12; a2_actual = lengths1[2]-self.l13
-         self.l11 = lengths1[0]; self.l12 = lengths1[1]; self.l13 = lengths1[2]
+         self.l11 = lengths1[0]; self.l12 = lengths1[1]; self.l13 = lengths1[2] # update tendon lenghts of segment 1
          self.l21 += a0_actual; self.l22 += a1_actual; self.l23 += a2_actual # apply actual tendon change of segment 1 to segment 2
          self.l21 += action[3]; self.l22 += action[4]; self.l23 += action[5] # apply action to segment 2
          # make sure tendon lengths for segment 2 are within min, max
@@ -225,29 +225,22 @@ class TendonTwoSegmentEnv(Env):
       alpha = 0.4; c1 = 1; c2 = 100; gamma=0.99; cpot = 50 # reward function params
       # regular step without terminating episode
       """R1"""
-#      reward = -1+c1*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-#                      + (old_dist_euclid/self.dist_start)**alpha)
-#     OLD reward = c1*(1-(new_dist_euclid/self.dist_start)**alpha) \
-#               -c2*(new_dist_euclid-old_dist_euclid)
+      reward = -1+cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+                        + (old_dist_euclid/self.dist_start)**alpha)
       """R2"""
-#      reward = c1*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+#      reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
 #                   +(old_dist_euclid/self.dist_start)**alpha)
-#     OLD reward = c1*(1-(new_dist_euclid/self.dist_start)**alpha)
       """R3"""
 #      reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
-#      OLD reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
       """R4"""
 #      reward = -c2*(new_dist_euclid-old_dist_euclid)
-#     OLD reward = -gamma*((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
       """R5"""
-      reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
-               -c2*(new_dist_euclid-old_dist_euclid)
-#     OLD reward = -((new_dist_euclid/self.dist_start)**alpha) + (old_dist_euclid/self.dist_start)**alpha
-      """R6"""
-#      reward = c1*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-#                   +(old_dist_euclid/self.dist_start)**alpha) \
+#      reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
 #               -c2*(new_dist_euclid-old_dist_euclid)
-#     OLD reward 5 leave out gamma_t
+      """R6"""
+#      reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+#                     +(old_dist_euclid/self.dist_start)**alpha) \
+#               -c2*(new_dist_euclid-old_dist_euclid)
       """R7 like R5 but leave out gamma_t at the bottom"""
 #      reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
 #               -c2*(new_dist_euclid-old_dist_euclid)
@@ -416,48 +409,3 @@ class TendonTwoSegmentEnv(Env):
       self.ax.add_artist(az_base)
       plt.show() # display figure and bring focus (once) to plotting window
       self.fig.tight_layout() # fits the plot to window size
-
-#env = TendonTwoSegmentEnv()
-#env.reset([0.1, 0.1, 0.1, 0.2, 0.2, 0.2], [0, 0, 0.235], [0.0, 0.0, 1.0])
-##env.reset([0.085, 0.115, 0.1115, 0.2,0.2,0.2])
-##i = 0
-#while True:
-##   s, r, done, info =env.step(np.random.uniform(-env.delta_l, env.delta_l, 6))
-#   s, r, done, info =env.step([0.001, 0.00, 0.00, 0.0, 0.0, 0.0])
-#   env.render(mode="human", pause = 0.2)
-#   i += 1
-#i= 0
-#for i in range(3):
-#   action =np.zeros(6)
-#   action[i] = 0.001
-#   for i in range(15):
-#      s, r, done, info = env.step(action)
-#      print("action \t\t", action)
-#      print("lengths1 \t", env.lengths1,"\nlengths2 \t", env.lengths2, "\neffective\t", [env.dl21, env.dl22, env.dl23])
-#      env.render(mode="human", pause=0.25)
-#
-#for i in range(3):
-#   action =np.zeros(6)
-#   action[i+3] = -0.001
-#   for i in range(30):
-#      s, r, done, info = env.step(action)
-#      print("action \t\t", action)
-#      print("lengths1 \t", env.lengths1,"\nlengths2 \t", env.lengths2, "\neffective\t", [env.dl21, env.dl22, env.dl23])
-#      env.render(mode="human", pause=1)
-#      env.render(mode="human", pause=2.5)
-
-#while i < 10:
-#   s, r, done, info = env.step([0.0, 0.0, 0.0, 0.001, -0.001, -0.001])
-#   env.render(mode="human", pause = 1)
-#   i += 1
-#for i in range(30):
-##   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.001, -0.001, -0.001])
-#   s, r, done, info =env.step([0.001, -0.001, -0.001, 0.00, -0.00, -0.00])
-##   s, r, done, info =env.step(np.random.uniform(-env.delta_l, env.delta_l, 6))
-##   print(s)
-#   print(env.lengths1, env.lengths2)
-#   env.render(mode="human")
-#   print("d cov: {:.2f}\t d {:.2f}  d_s {:.2f}".format( -1000*(env.new_dist_euclid-env.old_dist_euclid), 1000*env.new_dist_euclid, 1000*env.dist_start ), end="\t")
-#   print("r {:.2f}".format(r),end="\t")
-#   if np.sign(-(env.new_dist_euclid-env.old_dist_euclid)) != np.sign(r): print("WRONG")
-#   else: print("")

@@ -24,7 +24,7 @@ def run_task(*_):
          baseline=baseline,
          batch_size = 4000,
          max_path_length=np.inf,
-         n_itr=20001,
+         n_itr=40001,
          discount=0.99,
          step_size=0.01,
    )
@@ -32,8 +32,8 @@ def run_task(*_):
 
 run_experiment_lite(
       run_task,
-      n_parallel=1,
-      exp_name="s2_r5_a04_h64_T100_dl1_itrmax20000_newlimits2_n10_newactuation",
+      n_parallel=2,
+      exp_name="s2_r1_da",
       snapshot_mode="gap",
       snapshot_gap=100,
       seed=1,
