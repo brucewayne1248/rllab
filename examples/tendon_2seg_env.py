@@ -242,6 +242,9 @@ class TendonTwoSegmentEnv(Env):
          reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
                         +(old_dist_euclid/self.dist_start)**alpha) \
                   -c2*(new_dist_euclid-old_dist_euclid)
+      elif self.rewardfn_num == 7:
+         reward = gamma*(1-(new_dist_euclid/self.dist_start)**alpha) - \
+                        (1-(old_dist_euclid/self.dist_start)**alpha)
       elif self.rewardfn_num == 8:
          reward = 1-((new_dist_euclid/self.dist_start)**alpha) \
                   + cpot*(-gamma*((new_dist_euclid/self.dist_start)**alpha) \

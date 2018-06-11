@@ -30,7 +30,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.d = 0.01
       self.n = 10
       self.dependent_actuation = True
-      self.rewardfn_num = 1 # choose which reward fn should be used
+      self.rewardfn_num = 2 # choose which reward fn should be used
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -265,31 +265,35 @@ class TendonTwoSegmentSE3Env(Env):
    def get_reward_done_info(self, dist_euclid_new, dist_euclid_old, diff_angle_new, diff_angle_old, steps):
       """returns reward, done, info dict after taking action"""
       done = False
-      alpha = 0.4; c1 = 1; c2 = 100; c3 = 1; c4 = 100; gamma=0.99 # reward function params
+      alpha = 0.4; beta = 0.2; c1 = 1; c2 = 100; c3 = 1; c4 = 100; gamma=0.99; cdpot = 50; copot = 50 # reward function params
+      wd = 1 # weighting factor of distance reward
+      wo = (1-(dist_euclid_new/self.dist_start))**beta if dist_euclid_new < self.dist_start else 0 # weighting factor of orientation reward
       # regular step without terminating episode
-      """R1"""
-#      reward = -1+c1*(-gamma*(dist_euclid_new/self.dist_start)**alpha \
-#                      + (dist_euclid_old/self.dist_start)**alpha)
-      """R2"""
-#      reward = c1*(-gamma*(dist_euclid_new/self.dist_start)**alpha \
-#                   +(dist_euclid_old/self.dist_start)**alpha)
-      """R3"""
-      reward = -c1*(dist_euclid_new/self.dist_start)**alpha \
-               -c3*(diff_angle_new/np.pi)**alpha
-      """R4"""
-#      reward = -c2*(dist_euclid_new-dist_euclid_old)
-      """R5"""
-#      reward = -c1*(dist_euclid_new/self.dist_start)**alpha \
-#               -c2*(dist_euclid_new-dist_euclid_old) \
-#               -c3*(diff_angle_new/np.pi)**alpha \
-#               -c4*(diff_angle_new-diff_angle_old)
-      """R6"""
-#      reward = c1*(-gamma*(dist_euclid_new/self.dist_start)**alpha \
-#                   +(dist_euclid_old/self.dist_start)**alpha) \
-#               -c2*(dist_euclid_new-dist_euclid_old)
-      """R7 like R5 but leave out gamma_t at the bottom"""
-#      reward = -c1*(dist_euclid_new/self.dist_start)**alpha \
-#               -c2*(dist_euclid_new-dist_euclid_old)
+      if self.rewardfn_num == 1:
+         reward = -1+cdpot*(-gamma*(dist_euclid_new/self.dist_start)**alpha \
+                           + (dist_euclid_old/self.dist_start)**alpha)
+      elif self.rewardfn_num == 2:
+         reward = wd*cdpot*(-gamma*(dist_euclid_new/self.dist_start)**alpha + \
+                           (dist_euclid_old/self.dist_start)**alpha) + \
+                  wo*copot*(-gamma*(diff_angle_new/np.pi)**alpha + \
+                           (diff_angle_old/np.pi)**alpha)
+         reward = copot*(-gamma*(diff_angle_new/np.pi)**alpha + \
+                        (diff_angle_old/np.pi)**alpha)
+      elif self.rewardfn_num == 3:
+         reward = -c1*((dist_euclid_new/self.dist_start)**alpha)
+      elif self.rewardfn_num == 4:
+         reward = -c2*(dist_euclid_new-dist_euclid_old)
+      elif self.rewardfn_num == 5:
+         reward = -c1*(dist_euclid_new/self.dist_start)**alpha \
+                  -c2*(dist_euclid_new-dist_euclid_old)
+      elif self.rewardfn_num == 6:
+         reward = cdpot*(-gamma*(dist_euclid_new/self.dist_start)**alpha \
+                        +(dist_euclid_old/self.dist_start)**alpha) \
+                  -c2*(dist_euclid_new-dist_euclid_old)
+      elif self.rewardfn_num == 8:
+         reward = 1-((dist_euclid_new/self.dist_start)**alpha) \
+                  + cdpot*(-gamma*((dist_euclid_new/self.dist_start)**alpha) \
+                          +((dist_euclid_old/self.dist_start)**alpha))
 
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(dist_euclid_new-dist_euclid_old))
@@ -313,8 +317,8 @@ class TendonTwoSegmentSE3Env(Env):
             self.info["str"] = "Max steps {}, distance to finish {:5.2f}mm, total distance covered {:5.2f}mm." \
                                .format(self.max_steps, 1000*self.dist_end, 1000*(self.dist_start-self.dist_end))
 
-      gamma_t = 1-(self.steps/(self.max_steps+1))
-      reward = gamma_t*reward
+#      gamma_t = 1-(self.steps/(self.max_steps+1))
+#      reward = gamma_t*reward
       return reward, done, self.info
 
    def arc_params(self, l1, l2, l3):
