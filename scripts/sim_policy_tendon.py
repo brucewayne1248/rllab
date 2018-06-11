@@ -8,8 +8,8 @@ import numpy as np
 from rllab.sampler.utils import rollout_tendon
 
 def print_env_info(env, env_wrapped):
-   print(vars(env))
-   print(env_wrapped.__dict__)
+#   print(vars(env))
+#   print(env_wrapped.__dict__)
    print(env._Serializable__args)
    if hasattr(env_wrapped, 'lmin'):
       print("lmin:", env_wrapped.lmin)
@@ -95,8 +95,6 @@ if __name__ == "__main__":
         env = data['env'] # wrapped env, access TendonOneSegmentEnv with env._wrapped_env
         lengths=None; goal=None; tangent_vec_goal=None
 
-        print(env._wrapped_env.max_steps)
-#        print(vars(policy))
         print(policy._cached_param_shapes)
         print_env_info(env, env._wrapped_env)
 
@@ -105,6 +103,10 @@ if __name__ == "__main__":
         else:
            env._wrapped_env.dependent_actuation = args.dependent_actuation
            print("Created depenpent_actuation attribute for Tendon Env.")
+
+        # set max steps of environment highe to test max performance of agent
+#        env._wrapped_env.max_steps = 200
+#        print("NEW MAX STEPS", env._wrapped_env.max_steps )
 
         while episode < total_episodes:
             if test_data is not None: # set starting lengths and goal according to test batch
@@ -118,6 +120,8 @@ if __name__ == "__main__":
                                   lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
 
             if path["env_infos"]["info"]["goal"] == True: # goal reached
+                print(env._wrapped_env.goal, env._wrapped_env.tip_vec2)
+                print(norm(env._wrapped_env.goal-env._wrapped_env.tip_vec2))
                 if args.analyze:
                     ep_lens_goal_reached.append(env._wrapped_env.steps)
                     diff_angles.append(env._wrapped_env.get_diff_angle(degree=True))

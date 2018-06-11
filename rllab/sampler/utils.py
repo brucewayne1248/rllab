@@ -73,6 +73,7 @@ def rollout_tendon(env, agent, always_return_paths=True,
         if render_mode:
             env.render(mode=render_mode, save_frames=save_frames)
         if d:
+            env.render(mode=render_mode, save_frames=save_frames)
             observations.append(env.observation_space.flatten(next_o)) # also append terminal observation
             env_infos.append(env_info) # only append terminal info
             break

@@ -29,6 +29,7 @@ class TendonTwoSegmentEnv(Env):
       self.d = 0.01
       self.n = 10
       self.dependent_actuation = True # I like dependent! indicates the way change of tendon lenghts interact with robot
+      self.rewardfn_num = 1 # number of chosen reward fn
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -224,31 +225,29 @@ class TendonTwoSegmentEnv(Env):
       done = False
       alpha = 0.4; c1 = 1; c2 = 100; gamma=0.99; cpot = 50 # reward function params
       # regular step without terminating episode
-      """R1"""
-      reward = -1+cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-                        + (old_dist_euclid/self.dist_start)**alpha)
-      """R2"""
-#      reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-#                   +(old_dist_euclid/self.dist_start)**alpha)
-      """R3"""
-#      reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
-      """R4"""
-#      reward = -c2*(new_dist_euclid-old_dist_euclid)
-      """R5"""
-#      reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
-#               -c2*(new_dist_euclid-old_dist_euclid)
-      """R6"""
-#      reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-#                     +(old_dist_euclid/self.dist_start)**alpha) \
-#               -c2*(new_dist_euclid-old_dist_euclid)
-      """R7 like R5 but leave out gamma_t at the bottom"""
-#      reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
-#               -c2*(new_dist_euclid-old_dist_euclid)
-      """R8"""
-#      reward = 1-((new_dist_euclid/self.dist_start)**alpha) \
-#               + cpot*(-gamma*((new_dist_euclid/self.dist_start)**alpha) \
-#                       +((old_dist_euclid/self.dist_start)**alpha))
+      if self.rewardfn_num == 1:
+         reward = -1+cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+                           + (old_dist_euclid/self.dist_start)**alpha)
+      elif self.rewardfn_num == 2:
+         reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+                        +(old_dist_euclid/self.dist_start)**alpha)
+      elif self.rewardfn_num == 3:
+         reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
+      elif self.rewardfn_num == 4:
+         reward = -c2*(new_dist_euclid-old_dist_euclid)
+      elif self.rewardfn_num == 5:
+         reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
+                  -c2*(new_dist_euclid-old_dist_euclid)
+      elif self.rewardfn_num == 6:
+         reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+                        +(old_dist_euclid/self.dist_start)**alpha) \
+                  -c2*(new_dist_euclid-old_dist_euclid)
+      elif self.rewardfn_num == 8:
+         reward = 1-((new_dist_euclid/self.dist_start)**alpha) \
+                  + cpot*(-gamma*((new_dist_euclid/self.dist_start)**alpha) \
+                          +((old_dist_euclid/self.dist_start)**alpha))
 
+      """R7 like R5 but leave out gamma_t at the bottom"""
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(new_dist_euclid-old_dist_euclid))
 
@@ -276,8 +275,8 @@ class TendonTwoSegmentEnv(Env):
             self.info["str"] = "Max steps {}, distance to finish {:5.2f}mm, total distance covered {:5.2f}mm." \
                                .format(self.max_steps, 1000*self.dist_end, 1000*(self.dist_start-self.dist_end))
 
-      gamma_t = 1-(self.steps/(self.max_steps+1))
-      reward = gamma_t*reward
+#      gamma_t = 1-(self.steps/(self.max_steps+1))
+#      reward = gamma_t*reward
       return reward, done, self.info
 
    def arc_params(self, l1, l2, l3):
