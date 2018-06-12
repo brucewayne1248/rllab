@@ -70,10 +70,10 @@ class TendonTwoSegmentSE3Env(Env):
       self.anglen_new = None; self.angleb_new = None; self.anglet_new = None # angles between normal, binormal, tangent vector of goal and tip vec at timestep t+1
       self.anglen_old = None; self.angleb_old = None; self.anglet_old = None # angles between normal, binormal, tangent vector of goal and tip vec at timestep t
       self.anglen_min = None; self.angleb_min = None; self.anglet_min = None # min angles between normal, binormal and tangent vectors
+
       self.qnew = None; self.qold = None # robot's tip quaternion at timestep t+1 and t
       self.qmin = None # min difference between goal's and robot's quaternion
       self.qgoal = None # goal quaternion
-
 
       # variables needed in episodic reinforcement learning
       self._state = None # state vector containing l1, l2, l3, tip position, and goal position
@@ -92,9 +92,6 @@ class TendonTwoSegmentSE3Env(Env):
       self.dist_start = None # euclidean start distance to goal
       self.dist_end = None # euclidean end distance to goal of episode
       self.dist_min = None # euclidean mmin distance to goal reached within each episode
-#      self.diff_angle_start = None
-#      self.diff_angle_end = None
-#      self.diff_angle_min = None
       self.fig = None # fig variable used for plotting
       self.frame = 10000
 
@@ -128,12 +125,13 @@ class TendonTwoSegmentSE3Env(Env):
       else:
          raise NotImplementedError
 
-      self._state = self.get_state()
       self.dist_start = norm(self.goal-self.tip_vec2)
       self.dist_min = self.dist_start
 
       self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles() # angles between vectors
       self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
+
+      self._state = self.get_state()
 
       self.steps = 0
       self.info["str"] = "Reset the environment."
@@ -184,8 +182,7 @@ class TendonTwoSegmentSE3Env(Env):
       goal coordinates, euclidean distance to goal"""
       return np.array([self.l11, self.l12, self.l13, self.l21, self.l22, self.l23,
                        self.tip_vec2[0], self.tip_vec2[1], self.tip_vec2[2],
-                       self.goal[0], self.goal[1], self.goal[2],
-                       norm(self.goal-self.tip_vec2),
+                       self.goal[0], self.goal[1], self.goal[2], norm(self.goal-self.tip_vec2),
                        self.tangent_vec2[0], self.tangent_vec2[1], self.tangent_vec2[2],
                        self.tangent_vec_goal[0], self.tangent_vec_goal[1], self.tangent_vec_goal[2],
                        self.anglet_new])
@@ -244,14 +241,12 @@ class TendonTwoSegmentSE3Env(Env):
       self.dist_vec_old = self.goal-self.tip_vec2
       self.dist_euclid_old = norm(self.dist_vec_old)
       self.anglen_old, self.angleb_old, self.anglet_old = self.get_diff_angles()
-      self.update_workspace()
+      self.update_workspace() # timestep t to t+1 for workspace variables
       self.dist_vec_new = self.goal-self.tip_vec2
       self.dist_euclid_new = norm(self.dist_vec_new)
       self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles()
       if self.dist_euclid_new < self.dist_min: # update min distance within one episode
          self.dist_min = self.dist_euclid_new
-#      if self.diff_angle_new < self.diff_angle_min:
-#         self.diff_angle_min = self.diff_angle_new
 
    def get_reward_done_info(self):
       """returns reward, done, info dict after taking action"""
@@ -471,12 +466,3 @@ class TendonTwoSegmentSE3Env(Env):
       plt.show() # display figure and bring focus (once) to plotting window
       self.fig.tight_layout() # fits the plot to window size
 
-env = TendonTwoSegmentSE3Env()
-env.reset()
-
-while True:
-   s, r, d, i = env.step(env.action_space.sample())
-   env.render(mode="human")
-   print(r)
-   if d:
-      env.reset()
