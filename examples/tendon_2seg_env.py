@@ -251,6 +251,7 @@ class TendonTwoSegmentEnv(Env):
                           +((old_dist_euclid/self.dist_start)**alpha))
 
       """R7 like R5 but leave out gamma_t at the bottom"""
+
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(new_dist_euclid-old_dist_euclid))
 
@@ -411,3 +412,4 @@ class TendonTwoSegmentEnv(Env):
       self.ax.add_artist(az_base)
       plt.show() # display figure and bring focus (once) to plotting window
       self.fig.tight_layout() # fits the plot to window size
+

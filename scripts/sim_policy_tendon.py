@@ -104,7 +104,11 @@ if __name__ == "__main__":
            env._wrapped_env.dependent_actuation = args.dependent_actuation
            print("Created depenpent_actuation attribute for Tendon Env.")
 
-        # set max steps of environment highe to test max performance of agent
+        if hasattr(env._wrapped_env, "rewardfn_num"):
+           pass
+        else: env._wrapped_env.rewardfn_num = 1; print("Created rewardfn_num attribute for tendon env")
+
+        # set max steps of environment to high value to test max performance of agent
 #        env._wrapped_env.max_steps = 200
 #        print("NEW MAX STEPS", env._wrapped_env.max_steps )
 
@@ -120,8 +124,8 @@ if __name__ == "__main__":
                                   lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
 
             if path["env_infos"]["info"]["goal"] == True: # goal reached
-                print(env._wrapped_env.goal, env._wrapped_env.tip_vec2)
-                print(norm(env._wrapped_env.goal-env._wrapped_env.tip_vec2))
+#                print(env._wrapped_env.goal, env._wrapped_env.tip_vec2)
+#                print(norm(env._wrapped_env.goal-env._wrapped_env.tip_vec2))
                 if args.analyze:
                     ep_lens_goal_reached.append(env._wrapped_env.steps)
                     diff_angles.append(env._wrapped_env.get_diff_angle(degree=True))

@@ -30,7 +30,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.d = 0.01
       self.n = 10
       self.dependent_actuation = True
-      self.rewardfn_num = 2 # choose which reward fn should be used
+      self.rewardfn_num = 5 # choose which reward fn should be used
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -57,27 +57,23 @@ class TendonTwoSegmentSE3Env(Env):
       self.tangent_vec2 = None # tangent vector robot's tip
       self.tip_vec1 = None # segment1 tip vector [m] [x, y, z]
       self.tip_vec2 = None # robot's tip vector [m] [x, y, z]
-      self.dist_vec_old = None # goal-tip_vec in vector form, at time step t
       self.dist_vec_new = None # goal-tip_vec in vector form, at time step t+1 after taking action a_t
-      self.dist_euclid_old = None # euclid dist to goal at time step t
+      self.dist_vec_old = None # goal-tip_vec in vector form, at time step t
       self.dist_euclid_new = None # euclid dist to goal at time step t+1 after taking action a_t
+      self.dist_euclid_old = None # euclid dist to goal at time step t
 
-      # RPY angles
-      self.Rnew = None; self.Pnew = None; self.Ynew = None
-      self.Rold = None; self.Pold = None; self.Yold = None
-      self.Rgoal = None; self.Pgoal = None; self.Ygoal = None
-      # angles between normal, binormal and tangentvec of goal and tip_vec2
-      self.anglen_new; self.angleb_new; self.anglet_new = None
-      self.anglen_old; self.angleb_old; self.anglet_old = None
-      # quaternions
-      self.qnew = None; self.qold = None # robot's tip quaternion
+      self.Rnew = None; self.Pnew = None; self.Ynew = None # RPY angles at timestep t+1
+      self.Rold = None; self.Pold = None; self.Yold = None # RPY angles at timestep t
+      self.Rgoal = None; self.Pgoal = None; self.Ygoal = None # RPY goal angles
+      self.Rmin = None; self.Pmin = None; self.Ymin = None # min RPY angles difference between goal's and robot's RPY
+
+      self.anglen_new = None; self.angleb_new = None; self.anglet_new = None # angles between normal, binormal, tangent vector of goal and tip vec at timestep t+1
+      self.anglen_old = None; self.angleb_old = None; self.anglet_old = None # angles between normal, binormal, tangent vector of goal and tip vec at timestep t
+      self.anglen_min = None; self.angleb_min = None; self.anglet_min = None # min angles between normal, binormal and tangent vectors
+      self.qnew = None; self.qold = None # robot's tip quaternion at timestep t+1 and t
+      self.qmin = None # min difference between goal's and robot's quaternion
       self.qgoal = None # goal quaternion
 
-#      self.diff_angle_new = None # angle between tangent_vec_goal and tangent_vec2 in rad at t+1
-#      self.diff_angle_old = None # angle between tangent_vec_goal and tangent_vec2 in rad at t
-
-      self.fig = None # fig variable used for plotting
-      self.frame = 10000
 
       # variables needed in episodic reinforcement learning
       self._state = None # state vector containing l1, l2, l3, tip position, and goal position
@@ -87,7 +83,8 @@ class TendonTwoSegmentSE3Env(Env):
       self.normal_vec_goal = None # normal vector of goal position
       self.binormal_vec_goal = None # binormal vector of goal position
       self.tangent_vec_goal = None # tangent vector of goal position
-      self.delta_l = 0.001 # max tendon length change per timestep
+      self.goal_lengths = None # tendon lengths of generated goal
+      self.delta_l = 0.001 # max change of tendon length per timestep
       self.max_steps = 150 # max steps per episode
       self.eps_dist = 1e-3 # distance tolerance to reach goal
       self.eps_angle = 5 * np.pi / 180 # angle tolerance between tangent_vec_goal and tangent_vec2 in rad
@@ -95,10 +92,11 @@ class TendonTwoSegmentSE3Env(Env):
       self.dist_start = None # euclidean start distance to goal
       self.dist_end = None # euclidean end distance to goal of episode
       self.dist_min = None # euclidean mmin distance to goal reached within each episode
-      self.dist = None # current distance to goal
-      self.diff_angle_start = None
-      self.diff_angle_end = None
-      self.diff_angle_min = None
+#      self.diff_angle_start = None
+#      self.diff_angle_end = None
+#      self.diff_angle_min = None
+      self.fig = None # fig variable used for plotting
+      self.frame = 10000
 
    @property
    def observation_space(self):
@@ -133,8 +131,10 @@ class TendonTwoSegmentSE3Env(Env):
       self._state = self.get_state()
       self.dist_start = norm(self.goal-self.tip_vec2)
       self.dist_min = self.dist_start
-      self.diff_angle_start = self.get_diff_angle()
-      self.diff_angle_min = self.diff_angle_start
+
+      self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles() # angles between vectors
+      self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
+
       self.steps = 0
       self.info["str"] = "Reset the environment."
       self.info["goal"] = False
@@ -155,27 +155,19 @@ class TendonTwoSegmentSE3Env(Env):
       T01 = self.transformation_matrix(kappa1, phi1, seg_len1)
       T12 = self.transformation_matrix(kappa2, phi2, seg_len2)
       T02 = np.matmul(T01, T12)
+      self.goal_lengths = np.array([l11goal, l12goal, l13goal, l21goal, l22goal, l23goal])
       self.goal = np.matmul(T02, self.base)[0:3]
       self.normal_vec_goal = T02[0:3, 0]
       self.binormal_vec_goal = T02[0:3, 1]
       self.tangent_vec_goal =  T02[0:3, 2]
-      # calculate RPY angles of goal here
-
+      # calculate RPY angles of goal here or quaternion
 
    def step(self, action):
       """Steps the environment and returns new state, reward, done, info."""
       self.steps += 1
-
       self.take_action(action) # changes tendon lengths and updates configuration/work space
-
       self._state = self.get_state()
-
-      reward, done, self.info = \
-         self.get_reward_done_info(self.dist_euclid_new,
-                                   self.dist_euclid_old,
-                                   self.diff_angle_new,
-                                   self.diff_angle_old,
-                                   self.steps)
+      reward, done, self.info = self.get_reward_done_info()
 
       if done == True:
          self.total_episodes += 1
@@ -196,10 +188,10 @@ class TendonTwoSegmentSE3Env(Env):
                        norm(self.goal-self.tip_vec2),
                        self.tangent_vec2[0], self.tangent_vec2[1], self.tangent_vec2[2],
                        self.tangent_vec_goal[0], self.tangent_vec_goal[1], self.tangent_vec_goal[2],
-                       self.get_diff_angle()])
+                       self.anglet_new])
 
    def update_workspace(self):
-      """updates configuration and work space variables after changing tendon lengths"""
+      """Updates configuration and work space variables after changing tendon lengths"""
       self.lengths1 = np.array([self.l11, self.l12, self.l13])
       self.lengths2 = np.array([self.l21, self.l22, self.l23])
       self.dl21 = self.l21-self.l11; self.dl22 = self.l22-self.l12; self.dl23 = self.l23-self.l13;
@@ -220,7 +212,7 @@ class TendonTwoSegmentSE3Env(Env):
    def take_action(self, action):
       """executes action at timestep t, and updates configuration/work space
       as well as distance variables"""
-      if self.dependent_actuation: # this is what i like
+      if self.dependent_actuation: # actuator decoupled actuation
          self.l11 += action[0]; self.l12 += action[1]; self.l13 += action[2]
          self.l21 += action[3]; self.l22 += action[4]; self.l23 += action[5]
          # make sure tendon lengths are within min, max
@@ -232,7 +224,7 @@ class TendonTwoSegmentSE3Env(Env):
          lengths2 = [self.l2min if l < self.l2min else l for l in lengths2]
          lengths2 = [self.l2max if l > self.l2max else l for l in lengths2]
          self.l21 = lengths2[0]; self.l22 = lengths2[1]; self.l23 = lengths2[2]
-      else: # independent acutation
+      else: # actuator coupled actuation
          l11 = self.l11; l12 = self.l12; l13 = self.l13
          l11 += action[0]; l12 += action[1]; l13 += action[2]
          lengths1 = [l11, l12, l13] # make sure actuator limits are not exceeded
@@ -249,79 +241,93 @@ class TendonTwoSegmentSE3Env(Env):
          lengths2 = [self.l2max if l > self.l2max else l for l in lengths2]
          self.l21 = lengths2[0]; self.l22 = lengths2[1]; self.l23 = lengths2[2]
 
-
       self.dist_vec_old = self.goal-self.tip_vec2
       self.dist_euclid_old = norm(self.dist_vec_old)
-      self.diff_angle_old = self.get_diff_angle()
+      self.anglen_old, self.angleb_old, self.anglet_old = self.get_diff_angles()
       self.update_workspace()
       self.dist_vec_new = self.goal-self.tip_vec2
       self.dist_euclid_new = norm(self.dist_vec_new)
-      self.diff_angle_new = self.get_diff_angle()
+      self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles()
       if self.dist_euclid_new < self.dist_min: # update min distance within one episode
          self.dist_min = self.dist_euclid_new
-      if self.diff_angle_new < self.diff_angle_min:
-         self.diff_angle_min = self.diff_angle_new
+#      if self.diff_angle_new < self.diff_angle_min:
+#         self.diff_angle_min = self.diff_angle_new
 
-   def get_reward_done_info(self, dist_euclid_new, dist_euclid_old, diff_angle_new, diff_angle_old, steps):
+   def get_reward_done_info(self):
       """returns reward, done, info dict after taking action"""
       done = False
-      alpha = 0.4; beta = 0.2; c1 = 1; c2 = 100; c3 = 1; c4 = 100; gamma=0.99; cdpot = 50; copot = 50 # reward function params
-      wd = 1 # weighting factor of distance reward
-      wo = (1-(dist_euclid_new/self.dist_start))**beta if dist_euclid_new < self.dist_start else 0 # weighting factor of orientation reward
-      # regular step without terminating episode
+      # get values needed to calculate rewards
+      dnew = self.dist_euclid_new; dold = self.dist_euclid_old; dstart = self.dist_start # new and old euclidean distances
+      atnew = self.anglet_new; atold = self.anglet_old # new and old angle between tangent vectors
+      # reward fn params
+      alpha = 0.4; beta = 0.1;
+      wp = 1; # 'w'eight of total 'p'osition reward
+      wo = (1-(dnew/dstart))**beta if dnew < dstart else 0 # 'w'eight of total 'o'rientation reward
+      wsp = 50 # 'w'eight of 's'haping reward for 'p'osition
+      wso = 50 # 'w'eight of 's'haping reward for 'o'rientation
+      gamma = 0.99 # discount for potential based shaping
+      wpp = 1; # 'w'eight of 'p'otential reward for 'p'osition
+      wpo = 1; # 'w'eight of 'p'otential reward for 'o'rientation
+      wlp = 100; # 'w'eight of 'l'inear reward for 'p'osition
+      wlo = 100; # 'w'eight of 'l'inear reward for 'o'rientation
+#      c1 = 1; c2 = 100; c3 = 100; c4 = 100; gamma=0.99; cdpot = 50; copot = 10 # reward function params
+
+      # regular step without terminating episode, rp = position reward, ro = orientation reward
       if self.rewardfn_num == 1:
-         reward = -1+cdpot*(-gamma*(dist_euclid_new/self.dist_start)**alpha \
-                           + (dist_euclid_old/self.dist_start)**alpha)
+         rp = -1+wsp*(-gamma*(dnew/dstart)**alpha + (dold/dstart)**alpha)
+         ro =    wso*(-gamma*(atnew/np.pi)**alpha + (atold/np.pi)**alpha)
       elif self.rewardfn_num == 2:
-         reward = wd*cdpot*(-gamma*(dist_euclid_new/self.dist_start)**alpha + \
-                           (dist_euclid_old/self.dist_start)**alpha) + \
-                  wo*copot*(-gamma*(diff_angle_new/np.pi)**alpha + \
-                           (diff_angle_old/np.pi)**alpha)
-         reward = copot*(-gamma*(diff_angle_new/np.pi)**alpha + \
-                        (diff_angle_old/np.pi)**alpha)
+         rp = wsp*(-gamma*(dnew/dstart)**alpha + (dold/dstart)**alpha)
+         ro = wso*(-gamma*(atnew/np.pi)**alpha + (atold/np.pi)**alpha)
       elif self.rewardfn_num == 3:
-         reward = -c1*((dist_euclid_new/self.dist_start)**alpha)
+         rp = -wpp*((dnew/dstart)**alpha)
+         ro = -wpo*((atnew/np.pi)**alpha)
       elif self.rewardfn_num == 4:
-         reward = -c2*(dist_euclid_new-dist_euclid_old)
+         rp = -wlp*(dnew-dold)
+         ro = -wlo*(atnew-atold)
       elif self.rewardfn_num == 5:
-         reward = -c1*(dist_euclid_new/self.dist_start)**alpha \
-                  -c2*(dist_euclid_new-dist_euclid_old)
+         rp = -wpp*(dnew/dstart)**alpha - wlp*(dnew-dold)
+         ro = -wpo*(atnew/np.pi)**alpha - wlo*(atnew-atold)
       elif self.rewardfn_num == 6:
-         reward = cdpot*(-gamma*(dist_euclid_new/self.dist_start)**alpha \
-                        +(dist_euclid_old/self.dist_start)**alpha) \
-                  -c2*(dist_euclid_new-dist_euclid_old)
+         pass
+      elif self.rewardfn_num == 7:
+         pass
       elif self.rewardfn_num == 8:
-         reward = 1-((dist_euclid_new/self.dist_start)**alpha) \
-                  + cdpot*(-gamma*((dist_euclid_new/self.dist_start)**alpha) \
-                          +((dist_euclid_old/self.dist_start)**alpha))
+         rp = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + ((dold/dstart)**alpha))
+         ro = 1-((atnew/np.pi)**alpha) + wso*(-gamma*((atnew/np.pi)**alpha) + ((atnew/np.pi)**alpha))
+         reward = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + \
+                    ((dold/dstart)**alpha))
+
+      reward = wp*rp + wo*ro
 
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
-                         .format(self.steps, 1000*(dist_euclid_new-dist_euclid_old))
+                         .format(self.steps, 1000*(dnew-dold))
 
       #terminate episode, when
       # 1. reaching goal and angle tolerance
       # 2. exceeding max steps of environment
-      if (dist_euclid_new < self.eps_dist and diff_angle_new < self.eps_angle) or \
+      if (dnew < self.eps_dist and atnew < self.eps_angle) or \
          self.steps >= self.max_steps:
 
          done = True
-         self.dist_end = dist_euclid_new
-         self.diff_angle_end = diff_angle_new
+         self.dist_end = dnew
+#         self.diff_angle_end = atnew
 
-         if dist_euclid_new < self.eps_dist and diff_angle_new < self.eps_angle:
-            reward = 200
+         if dnew < self.eps_dist and atnew < self.eps_angle:
+            reward = 150
             self.info["goal"] = True
             self.info["str"] = "GOAL! Distance {:.2f}mm @step {:3d}, total distance covered {:.2f}mm." \
-                               .format(1000*norm(self.goal-self.tip_vec2), self.steps, 1000*norm(self.dist_start-self.dist_end))
+                               .format(1000*norm(self.goal-self.tip_vec2), self.steps, 1000*norm(dstart-self.dist_end))
          elif self.steps >= self.max_steps:
             self.info["str"] = "Max steps {}, distance to finish {:5.2f}mm, total distance covered {:5.2f}mm." \
-                               .format(self.max_steps, 1000*self.dist_end, 1000*(self.dist_start-self.dist_end))
+                               .format(self.max_steps, 1000*self.dist_end, 1000*(dstart-self.dist_end))
 
 #      gamma_t = 1-(self.steps/(self.max_steps+1))
 #      reward = gamma_t*reward
       return reward, done, self.info
 
    def arc_params(self, l1, l2, l3):
+      """Returns arc parameters kappa, phi, s of continuum robot."""
       # useful expressions to shorten formulas below
       lsum = l1+l2+l3
       expr = l1**2+l2**2+l3**2-l1*l2-l1*l3-l2*l3
@@ -349,10 +355,15 @@ class TendonTwoSegmentSE3Env(Env):
                        [0, 0, 0, 1]])
       return T
 
-   def get_diff_angle(self, degree=False):
-      alpha = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / \
-                  (norm(self.tangent_vec2) * norm(self.tangent_vec_goal))
-      return alpha*180/np.pi if degree else alpha
+   def get_diff_angles(self, degree=False):
+      """Returns the angles between normal, binormal, and tangent vector of goal and robot orientation"""
+      anglen = acos(np.dot(self.normal_vec2, self.normal_vec_goal)) / (norm(self.normal_vec2)*norm(self.normal_vec_goal))
+      angleb = acos(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / (norm(self.binormal_vec2)*norm(self.binormal_vec_goal))
+      anglet = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / (norm(self.tangent_vec2)*norm(self.tangent_vec_goal))
+      if degree:
+         return anglen*180/np.pi, angleb*180/np.pi, anglet*180/np.pi
+      else:
+         return anglen, angleb, anglet
 
    def render(self, mode="human", pause=0.0000001, save_frames=False):
       """ renders the 3d plot of the robot's arc, pause (float) determines how long each frame is shown
@@ -369,7 +380,8 @@ class TendonTwoSegmentSE3Env(Env):
              self.ax.lines.pop() # delete plots of previous frame
          self.ax.plot(points1[:,0], points1[:,1], points1[:,2], label="Segment 1", c="black", linewidth=3)
          self.ax.plot(points2[:,0], points2[:,1], points2[:,2], label="Segment 2", c="grey", linewidth=2)
-         self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], linestyle=None, label="Ziel", c="magenta", marker="x", markersize=11)
+#         self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], linestyle=None, label="Ziel", c="magenta", marker="x", markersize=11)
+         self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], label="Ziel", c="magenta", marker="x", markersize=11)
          self.ax.legend()
 
          # delete arrows of previous frame, except base frame
@@ -395,9 +407,15 @@ class TendonTwoSegmentSE3Env(Env):
          self.ax.add_artist(abinormal2)
          self.ax.add_artist(atangent2)
          # tangent vector indicating orientation of goal point
+         anormal_goal = self.create_arrow(self.goal, self.normal_vec_goal, self.arrow_len,
+                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="r")
+         abinormal_goal = self.create_arrow(self.goal, self.binormal_vec_goal, self.arrow_len,
+                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="g")
          atangent_goal = self.create_arrow(self.goal, self.tangent_vec_goal, self.arrow_len,
-                                           "-|>", self.arrow_lw, self.arrow_ms, c="magenta")
+                                           "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="b")
          self.ax.add_artist(atangent_goal)
+         self.ax.add_artist(anormal_goal)
+         self.ax.add_artist(abinormal_goal)
 
          plot_loop_pause(pause) # updates plot without losing window focus
          if save_frames == True:
@@ -405,7 +423,7 @@ class TendonTwoSegmentSE3Env(Env):
             self.frame += 1
 
    def points_on_arc(self, num_points):
-      """ returns np.arrays [num_points, 3] arc points [x(s), y(s), z(s)] [m] """
+      """Returns np.arrays of arc points with shape [num_points, 3] [x(s), y(s), z(s)] [m]"""
       points1 = np.zeros((num_points, 3)) # points placeholder for segment 1
       points2 = np.zeros((num_points, 3)) # points placeholder for segment 2
       s1 = np.linspace(0.0, self.seg_len1, num_points) # variable arc length 1
@@ -418,7 +436,7 @@ class TendonTwoSegmentSE3Env(Env):
       return points1, points2
 
    def create_arrow(self, start_vec, dir_vec, alen, astyle, alw, ams, c):
-      """Returns a 3D arrow pointing to dir_vec from start_vec. dir_vec should be a unit vector"""
+      """Returns a 3D arrow pointing from start_vec to dir_vec. dir_vec should be a unit vector"""
       a = Arrow3D([start_vec[0], start_vec[0]+alen*dir_vec[0]],
                   [start_vec[1], start_vec[1]+alen*dir_vec[1]],
                   [start_vec[2], start_vec[2]+alen*dir_vec[2]],
@@ -430,13 +448,13 @@ class TendonTwoSegmentSE3Env(Env):
       plt.ion() # interactive plot mode, panning, zooming enabled
       self.fig = plt.figure(figsize=(9.5,7.2))
       self.ax = self.fig.add_subplot(111, projection="3d") # attach z-axis to plot
-      # set axe limits and labels
+      # set axis limits and labels
       self.ax.set_xlim([-0.5*self.l2max, 0.5*self.l2max])
       self.ax.set_ylim([-0.5*self.l2max, 0.5*self.l2max])
       self.ax.set_zlim([0.0, self.l2max])
-      self.ax.set_xlabel("X [m]")
-      self.ax.set_ylabel("Y [m]")
-      self.ax.set_zlabel("Z [m]")
+      self.ax.set_xlabel("x in [m]")
+      self.ax.set_ylabel("y in [m]")
+      self.ax.set_zlabel("z in [m]")
       # add coordinate 3 arrows of base frame, have to be defined once!
       self.arrow_len = 0.03
       self.arrow_lw = 1.5
@@ -459,5 +477,6 @@ env.reset()
 while True:
    s, r, d, i = env.step(env.action_space.sample())
    env.render(mode="human")
+   print(r)
    if d:
-      break
+      env.reset()
