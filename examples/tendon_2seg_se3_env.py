@@ -402,15 +402,15 @@ class TendonTwoSegmentSE3Env(Env):
          self.ax.add_artist(abinormal2)
          self.ax.add_artist(atangent2)
          # tangent vector indicating orientation of goal point
-         anormal_goal = self.create_arrow(self.goal, self.normal_vec_goal, self.arrow_len,
-                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="r")
-         abinormal_goal = self.create_arrow(self.goal, self.binormal_vec_goal, self.arrow_len,
-                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="g")
+#         anormal_goal = self.create_arrow(self.goal, self.normal_vec_goal, self.arrow_len,
+#                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="r")
+#         abinormal_goal = self.create_arrow(self.goal, self.binormal_vec_goal, self.arrow_len,
+#                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="g")
          atangent_goal = self.create_arrow(self.goal, self.tangent_vec_goal, self.arrow_len,
                                            "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="b")
+#         self.ax.add_artist(anormal_goal)
+#         self.ax.add_artist(abinormal_goal)
          self.ax.add_artist(atangent_goal)
-         self.ax.add_artist(anormal_goal)
-         self.ax.add_artist(abinormal_goal)
 
          plot_loop_pause(pause) # updates plot without losing window focus
          if save_frames == True:
@@ -465,4 +465,3 @@ class TendonTwoSegmentSE3Env(Env):
       self.ax.add_artist(az_base)
       plt.show() # display figure and bring focus (once) to plotting window
       self.fig.tight_layout() # fits the plot to window size
-

@@ -24,7 +24,13 @@ def print_env_info(env, env_wrapped):
    print("state:", env_wrapped._state)
    print("delta_l:", env_wrapped.delta_l)
    print("max_steps:", env_wrapped.max_steps)
-   print("eps:", env_wrapped.eps)
+   if hasattr(env_wrapped, "eps"):
+      print("eps:", env_wrapped.eps)
+   else:
+      print("eps dist:", env_wrapped.eps_dist)
+      print("eps_angle:", env_wrapped.eps_angle*180/np.pi)
+   if hasattr(env_wrapped, "dependent_actuation"):
+      print("dependent_actuation:", env_wrapped.dependent_actuation)
    print("goals: {}/{}".format(env_wrapped.total_goals_reached, env_wrapped.total_episodes))
 
 def retry_ep(goal, tangent_vec_goal, max_retries, verbose=False):
@@ -108,6 +114,10 @@ if __name__ == "__main__":
            pass
         else: env._wrapped_env.rewardfn_num = 1; print("Created rewardfn_num attribute for tendon env")
 
+#        if hasattr(env._wrapped_env, "eps"):
+#           pass
+#        else: env._wrapped_env.eps = 0.001; print("Created eps attribute for tendon env")
+
         # set max steps of environment to high value to test max performance of agent
 #        env._wrapped_env.max_steps = 200
 #        print("NEW MAX STEPS", env._wrapped_env.max_steps )
@@ -128,7 +138,10 @@ if __name__ == "__main__":
 #                print(norm(env._wrapped_env.goal-env._wrapped_env.tip_vec2))
                 if args.analyze:
                     ep_lens_goal_reached.append(env._wrapped_env.steps)
-                    diff_angles.append(env._wrapped_env.get_diff_angle(degree=True))
+                    try:
+                       diff_angles.append(env._wrapped_env.get_diff_angle(degree=True))
+                    except:
+                       diff_angles.append(env._wrapped_env.get_diff_angles(degree=True)[2])
                     goals_reached += 1
                 cur_goal_reached = True
             else: # goal not reached
