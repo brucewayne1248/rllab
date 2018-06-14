@@ -29,7 +29,7 @@ class TendonTwoSegmentEnv(Env):
       self.d = 0.01
       self.n = 10
       self.dependent_actuation = True # I like dependent! indicates the way change of tendon lenghts interact with robot
-      self.rewardfn_num = 1 # number of chosen reward fn
+      self.rewardfn_num = 2 # number of chosen reward fn
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths

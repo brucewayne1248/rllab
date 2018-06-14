@@ -30,7 +30,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.d = 0.01
       self.n = 10
       self.dependent_actuation = True
-      self.rewardfn_num = 5 # choose which reward fn should be used
+      self.rewardfn_num = 8 # choose which reward fn should be used
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -265,7 +265,6 @@ class TendonTwoSegmentSE3Env(Env):
       wpo = 1; # 'w'eight of 'p'otential reward for 'o'rientation
       wlp = 100; # 'w'eight of 'l'inear reward for 'p'osition
       wlo = 100; # 'w'eight of 'l'inear reward for 'o'rientation
-#      c1 = 1; c2 = 100; c3 = 100; c4 = 100; gamma=0.99; cdpot = 50; copot = 10 # reward function params
 
       # regular step without terminating episode, rp = position reward, ro = orientation reward
       if self.rewardfn_num == 1:
@@ -290,8 +289,6 @@ class TendonTwoSegmentSE3Env(Env):
       elif self.rewardfn_num == 8:
          rp = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + ((dold/dstart)**alpha))
          ro = 1-((atnew/np.pi)**alpha) + wso*(-gamma*((atnew/np.pi)**alpha) + ((atnew/np.pi)**alpha))
-         reward = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + \
-                    ((dold/dstart)**alpha))
 
       reward = wp*rp + wo*ro
 
@@ -301,8 +298,7 @@ class TendonTwoSegmentSE3Env(Env):
       #terminate episode, when
       # 1. reaching goal and angle tolerance
       # 2. exceeding max steps of environment
-      if (dnew < self.eps_dist and atnew < self.eps_angle) or \
-         self.steps >= self.max_steps:
+      if (dnew < self.eps_dist and atnew < self.eps_angle) or self.steps >= self.max_steps:
 
          done = True
          self.dist_end = dnew
