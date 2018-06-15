@@ -24,7 +24,7 @@ def run_task(*_):
          baseline=baseline,
          batch_size = 4000,
          max_path_length=np.inf,
-         n_itr=50001,
+         n_itr=40001,
          discount=0.99,
          step_size=0.01,
    )

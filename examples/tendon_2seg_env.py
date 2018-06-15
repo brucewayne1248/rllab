@@ -249,6 +249,8 @@ class TendonTwoSegmentEnv(Env):
          reward = 1-((new_dist_euclid/self.dist_start)**alpha) \
                   + cpot*(-gamma*((new_dist_euclid/self.dist_start)**alpha) \
                           +((old_dist_euclid/self.dist_start)**alpha))
+      elif self.rewardfn_num == 9:
+         reward = 1-((new_dist_euclid/self.delta_l)**alpha)
 
       """R7 like R5 but leave out gamma_t at the bottom"""
 
@@ -267,7 +269,7 @@ class TendonTwoSegmentEnv(Env):
          self.dist_end = new_dist_euclid
 
          if new_dist_euclid > self.dist_start+15*self.eps:
-            reward = -100
+            reward = -1000
             self.info["str"] = "Moving too far away from finish @step {:3d}, start_dist: {:5.2f}mm, end_dist: {:5.2f}mm." \
                                .format(self.steps, 1000*self.dist_start, 1000*norm(self.goal-self.tip_vec2))
          elif new_dist_euclid < self.eps:

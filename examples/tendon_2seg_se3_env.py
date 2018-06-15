@@ -283,12 +283,16 @@ class TendonTwoSegmentSE3Env(Env):
          rp = -wpp*(dnew/dstart)**alpha - wlp*(dnew-dold)
          ro = -wpo*(atnew/np.pi)**alpha - wlo*(atnew-atold)
       elif self.rewardfn_num == 6:
-         pass
+         rp = 1-((dnew/dstart)**alpha)
+         ro = 1-((atnew/np.pi)**alpha)
       elif self.rewardfn_num == 7:
          pass
       elif self.rewardfn_num == 8:
          rp = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + ((dold/dstart)**alpha))
          ro = 1-((atnew/np.pi)**alpha) + wso*(-gamma*((atnew/np.pi)**alpha) + ((atnew/np.pi)**alpha))
+      elif self.rewardfn_num == 9:
+         rp = 1-((dnew/self.delta_l)**alpha)
+         ro = 1-((atnew/np.pi)**alpha)
 
       reward = wp*rp + wo*ro
 
