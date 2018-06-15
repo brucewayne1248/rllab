@@ -291,8 +291,8 @@ class TendonTwoSegmentSE3Env(Env):
          rp = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + ((dold/dstart)**alpha))
          ro = 1-((atnew/np.pi)**alpha) + wso*(-gamma*((atnew/np.pi)**alpha) + ((atnew/np.pi)**alpha))
       elif self.rewardfn_num == 9:
-         rp = 1-((dnew/self.delta_l)**alpha)
-         ro = 1-((atnew/np.pi)**alpha)
+         rp = 1-((dnew/self.eps_dist)**alpha)
+         ro = 1-((atnew/self.eps_angle)**alpha)
 
       reward = wp*rp + wo*ro
 

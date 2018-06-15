@@ -250,7 +250,7 @@ class TendonTwoSegmentEnv(Env):
                   + cpot*(-gamma*((new_dist_euclid/self.dist_start)**alpha) \
                           +((old_dist_euclid/self.dist_start)**alpha))
       elif self.rewardfn_num == 9:
-         reward = 1-((new_dist_euclid/self.delta_l)**alpha)
+         reward = 1-((new_dist_euclid/self.eps)**alpha)
 
       """R7 like R5 but leave out gamma_t at the bottom"""
 
