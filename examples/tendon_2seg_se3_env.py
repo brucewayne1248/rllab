@@ -85,7 +85,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.tangent_vec_goal = None # tangent vector of goal position
       self.goal_lengths = None # tendon lengths of generated goal
       self.delta_l = 0.001 # max change of tendon length per timestep
-      self.max_steps = 150 # max steps per episode
+      self.max_steps = 75 # max steps per episode
       self.eps_dist = 1e-3 # distance tolerance to reach goal
       self.eps_angle = 5 * np.pi / 180 # angle tolerance between tangent_vec_goal and tangent_vec2 in rad
       self.eps_q = None # quaternion tolerance ...
@@ -255,7 +255,7 @@ class TendonTwoSegmentSE3Env(Env):
       dnew = self.dist_euclid_new; dold = self.dist_euclid_old; dstart = self.dist_start # new and old euclidean distances
       atnew = self.anglet_new; atold = self.anglet_old # new and old angle between tangent vectors
       # reward fn params
-      alpha = 0.4; beta = 0.1;
+      alpha = 0.4; beta = 0.4; alphap = 0.4; alphao = 0.1;
       wp = 1; # 'w'eight of total 'p'osition reward
       wo = (1-(dnew/dstart))**beta if dnew < dstart else 0 # 'w'eight of total 'o'rientation reward
       wsp = 50 # 'w'eight of 's'haping reward for 'p'osition
@@ -291,8 +291,8 @@ class TendonTwoSegmentSE3Env(Env):
          rp = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + ((dold/dstart)**alpha))
          ro = 1-((atnew/np.pi)**alpha) + wso*(-gamma*((atnew/np.pi)**alpha) + ((atnew/np.pi)**alpha))
       elif self.rewardfn_num == 9:
-         rp = 1-((dnew/self.eps_dist)**alpha)
-         ro = 1-((atnew/self.eps_angle)**alpha)
+         rp = 1-((dnew/self.eps_dist)**alphap)
+         ro = 1-((atnew/self.eps_angle)**alphao)
 
       reward = wp*rp + wo*ro
 
