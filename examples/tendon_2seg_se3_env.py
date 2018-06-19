@@ -85,7 +85,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.tangent_vec_goal = None # tangent vector of goal position
       self.goal_lengths = None # tendon lengths of generated goal
       self.delta_l = 0.001 # max change of tendon length per timestep
-      self.max_steps = 75 # max steps per episode
+      self.max_steps = 100 # max steps per episode
       self.eps_dist = 1e-3 # distance tolerance to reach goal
       self.eps_angle = 5 * np.pi / 180 # angle tolerance between tangent_vec_goal and tangent_vec2 in rad
       self.eps_q = None # quaternion tolerance ...
@@ -293,6 +293,9 @@ class TendonTwoSegmentSE3Env(Env):
       elif self.rewardfn_num == 9:
          rp = 1-((dnew/self.eps_dist)**alphap)
          ro = 1-((atnew/self.eps_angle)**alphao)
+      elif self.rewardfn_num == 10:
+         rp = 1-((dnew/self.eps_dist)**alphap)
+         ro = np.max(0 , 1-((atnew/self.eps_angle)**alphao))
 
       reward = wp*rp + wo*ro
 
@@ -402,14 +405,14 @@ class TendonTwoSegmentSE3Env(Env):
          self.ax.add_artist(abinormal2)
          self.ax.add_artist(atangent2)
          # tangent vector indicating orientation of goal point
-#         anormal_goal = self.create_arrow(self.goal, self.normal_vec_goal, self.arrow_len,
-#                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="r")
-#         abinormal_goal = self.create_arrow(self.goal, self.binormal_vec_goal, self.arrow_len,
-#                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="g")
+         anormal_goal = self.create_arrow(self.goal, self.normal_vec_goal, self.arrow_len,
+                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="r")
+         abinormal_goal = self.create_arrow(self.goal, self.binormal_vec_goal, self.arrow_len,
+                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="g")
          atangent_goal = self.create_arrow(self.goal, self.tangent_vec_goal, self.arrow_len,
                                            "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="b")
-#         self.ax.add_artist(anormal_goal)
-#         self.ax.add_artist(abinormal_goal)
+         self.ax.add_artist(anormal_goal)
+         self.ax.add_artist(abinormal_goal)
          self.ax.add_artist(atangent_goal)
 
          plot_loop_pause(pause) # updates plot without losing window focus
@@ -441,7 +444,7 @@ class TendonTwoSegmentSE3Env(Env):
    def init_render(self):
       """ sets up 3d plot """
       plt.ion() # interactive plot mode, panning, zooming enabled
-      self.fig = plt.figure(figsize=(9.5,7.2))
+      self.fig = plt.figure(figsize=(1.5*9.5,1.5*7.2))
       self.ax = self.fig.add_subplot(111, projection="3d") # attach z-axis to plot
       # set axis limits and labels
       self.ax.set_xlim([-0.5*self.l2max, 0.5*self.l2max])

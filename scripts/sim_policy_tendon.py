@@ -119,7 +119,7 @@ if __name__ == "__main__":
 #        else: env._wrapped_env.eps = 0.001; print("Created eps attribute for tendon env")
 
         # set max steps of environment to high value to test max performance of agent
-#        env._wrapped_env.max_steps = 200
+#        env._wrapped_env.max_steps = 70
 #        print("NEW MAX STEPS", env._wrapped_env.max_steps )
 
         while episode < total_episodes:
