@@ -30,7 +30,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.d = 0.01
       self.n = 10
       self.dependent_actuation = True
-      self.rewardfn_num = 8 # choose which reward fn should be used
+      self.rewardfn_num = 9 # choose which reward fn should be used
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -80,6 +80,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.info = {} # used to store adaditional environment data
       self.steps = None # current step the episode is in
       self.goal = None # goal to be reached by the robot's tip [x, y, z] [m]
+      self.goal_lenghts = None #
       self.normal_vec_goal = None # normal vector of goal position
       self.binormal_vec_goal = None # binormal vector of goal position
       self.tangent_vec_goal = None # tangent vector of goal position
@@ -120,8 +121,12 @@ class TendonTwoSegmentSE3Env(Env):
          while norm(self.goal-self.tip_vec2) < 2*self.eps_dist:
             self.set_goal() # set a new goal for the episode
       elif goal is not None and tangent_vec_goal is not None: # create goal given by fn params
+         assert len(goal) == 3 and len(tangent_vec_goal) == 3
          self.goal = goal
          self.tangent_vec_goal = tangent_vec_goal
+      elif goal is not None and tangent_vec_goal is None: # this is the case when goal lenghts are given instead of point in workspace
+         assert len(goal) == 6
+         self.set_goal(goallengths=goal)
       else:
          raise NotImplementedError
 
@@ -131,6 +136,8 @@ class TendonTwoSegmentSE3Env(Env):
       self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles() # angles between vectors
       self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
 
+      self.Rmin, self.Pmin, self.Ymin = self.get_orientation(self.T02)
+
       self._state = self.get_state()
 
       self.steps = 0
@@ -138,27 +145,32 @@ class TendonTwoSegmentSE3Env(Env):
       self.info["goal"] = False
       return self._state
 
-   def set_goal(self):
+   def set_goal(self, goallengths=None):
       """ Sets the goal to a random point of the robot's workspace [x, y, z] in [m]
       and sets the tangent vector accordingly."""
-      l11goal = np.random.uniform(self.l1min, self.l1max)
-      l12goal = np.random.uniform(self.l1min, self.l1max)
-      l13goal = np.random.uniform(self.l1min, self.l1max)
-      l21goal = np.random.uniform(self.l2min, self.l2max)
-      l22goal = np.random.uniform(self.l2min, self.l2max)
-      l23goal = np.random.uniform(self.l2min, self.l2max)
+      if goallengths is None:
+         l11goal = np.random.uniform(self.l1min, self.l1max)
+         l12goal = np.random.uniform(self.l1min, self.l1max)
+         l13goal = np.random.uniform(self.l1min, self.l1max)
+         l21goal = np.random.uniform(self.l2min, self.l2max)
+         l22goal = np.random.uniform(self.l2min, self.l2max)
+         l23goal = np.random.uniform(self.l2min, self.l2max)
+      else:
+         l11goal = goallengths[0]; l12goal = goallengths[1]; l13goal = goallengths[2]
+         l21goal = goallengths[3]; l22goal = goallengths[4]; l23goal = goallengths[5]
+      self.goal_lengths = np.array([l11goal, l12goal, l13goal, l21goal, l22goal, l23goal])
       dl21goal = l21goal-l11goal; dl22goal = l22goal-l12goal; dl23goal = l23goal-l13goal
       kappa1, phi1, seg_len1 = self.arc_params(l11goal, l12goal, l13goal)
       kappa2, phi2, seg_len2 = self.arc_params(dl21goal, dl22goal, dl23goal)
       T01 = self.transformation_matrix(kappa1, phi1, seg_len1)
       T12 = self.transformation_matrix(kappa2, phi2, seg_len2)
       T02 = np.matmul(T01, T12)
-      self.goal_lengths = np.array([l11goal, l12goal, l13goal, l21goal, l22goal, l23goal])
       self.goal = np.matmul(T02, self.base)[0:3]
       self.normal_vec_goal = T02[0:3, 0]
       self.binormal_vec_goal = T02[0:3, 1]
       self.tangent_vec_goal =  T02[0:3, 2]
       # calculate RPY angles of goal here or quaternion
+      self.Rgoal, self.Pgoal, self.Ygoal = self.get_orientation(T02)
 
    def step(self, action):
       """Steps the environment and returns new state, reward, done, info."""
@@ -247,6 +259,8 @@ class TendonTwoSegmentSE3Env(Env):
       self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles()
       if self.dist_euclid_new < self.dist_min: # update min distance within one episode
          self.dist_min = self.dist_euclid_new
+         self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
+         self.Rmin, self.Pmin, self.Ymin = self.get_orientation(self.T02)
 
    def get_reward_done_info(self):
       """returns reward, done, info dict after taking action"""
@@ -319,9 +333,9 @@ class TendonTwoSegmentSE3Env(Env):
          elif self.steps >= self.max_steps:
             self.info["str"] = "Max steps {}, distance to finish {:5.2f}mm, total distance covered {:5.2f}mm." \
                                .format(self.max_steps, 1000*self.dist_end, 1000*(dstart-self.dist_end))
-
 #      gamma_t = 1-(self.steps/(self.max_steps+1))
 #      reward = gamma_t*reward
+#      print("d: {:4.2f} rp: {:4.2f} a: {:4.2f} ro: {:4.2f} r: {:4.2f}".format(dnew*1000, rp, atnew*180/np.pi, ro, reward))
       return reward, done, self.info
 
    def arc_params(self, l1, l2, l3):
@@ -363,7 +377,27 @@ class TendonTwoSegmentSE3Env(Env):
       else:
          return anglen, angleb, anglet
 
-   def render(self, mode="human", pause=0.0000001, save_frames=False):
+   def get_orientation(self, T, representation="eulerZYX", degree=False):
+      T = np.array(T)
+      if representation == "eulerZYX":
+      # R = R_x(theta1) R_y(theta2) R_z(theta3) corresponds to RPY - theta1 = PHI - R, theta2 = Theta - P, theta3 = Psi - Y
+      # See https://pdfs.semanticscholar.org/6681/37fa4b875d890f446e689eea1e334bcf6bf6.pdf
+      # Should handle the singularity at theta2 +- pi/2
+         theta1 = atan2(T[1,2], T[2,2])
+         c2 = sqrt(T[0,0]**2+T[0,1]**2)
+         theta2 = atan2(-T[0,2], c2)
+         s1 = sin(theta1); c1 = cos(theta1)
+         theta3 = atan2(s1*T[2,0]-c1*T[1,0], c1*T[1,1]-s1*T[2,1])
+#         theta3 = atan2(T[0,1], T[00])
+      elif representation == "eulerZYZ":
+      # R = R_z(theta1) R_y(theta2) R_z(theta3)
+      # NEEDS HANDLING OF SINGULARITY FOR THETA2 ~ 0
+         theta2 = atan2(sqrt(T[2,0]**2+T[2,1]**2), T[2,2])
+         theta1 = atan2(T[1,2]/sin(theta2), T[0,2]/sin(theta2))
+         theta3 = atan2(T[2,1]/sin(theta2), -T[2,0]/sin(theta2))
+      return (theta1*180/np.pi, theta2*180/np.pi, theta3*180/np.pi) if degree else (theta1, theta2, theta3)
+
+   def render(self, mode="human", pause=0.0000000001, save_frames=False):
       """ renders the 3d plot of the robot's arc, pause (float) determines how long each frame is shown
           when save frames is set to True each frame of the plot is saved in an png file"""
       if self.steps % 5 == 0 and mode=="string":

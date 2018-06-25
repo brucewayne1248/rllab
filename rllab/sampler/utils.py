@@ -58,6 +58,8 @@ def rollout_tendon(env, agent, always_return_paths=True,
         o = env._wrapped_env.reset(lengths, goal, tangent_vec_goal)
     elif lengths is None and goal is not None and tangent_vec_goal is not None:
         o = env._wrapped_env.reset(lengths, goal, tangent_vec_goal)
+    elif lengths is None and goal is not None and tangent_vec_goal is None:
+        o = env._wrapped_env.reset(lengths, goal, tangent_vec_goal)
     else:
         o = env.reset()
     agent.reset()

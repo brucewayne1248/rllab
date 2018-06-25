@@ -1,8 +1,8 @@
 import argparse
-import sys
+import os
 import joblib
 import tensorflow as tf
-import pickle
+import pickle, scipy.io
 
 import numpy as np
 from rllab.sampler.utils import rollout_tendon
@@ -50,6 +50,55 @@ def retry_ep(goal, tangent_vec_goal, max_retries, verbose=False):
         if verbose: print("Goal still not reached after {} retries.".format(retry+1))
         return False
 
+def save_results(filename):
+    global dist_mins, arc_lens, dist_relmins, anglediffs_tangent, RPYgoals, RPYmins, Rdiffs, Pdiffs, Ydiffs
+    directory = os.path.dirname(os.path.abspath(filename))
+    result_dict = {"dist_mins": dist_mins, "arc_lens":arc_lens, "dist_relmins":dist_relmins, "anglediffs_tangent":anglediffs_tangent,
+                   "RPYgoals":RPYgoals, "RPYmins":RPYmins, "Rdiffs":Rdiffs, "Pdiffs":Pdiffs, "Ydiffs":Ydiffs}
+    with open(directory+"/benchmark.pkl", "wb") as f:
+        pickle.dump(result_dict, f)
+    scipy.io.savemat(directory+"/benchmark.mat", mdict=result_dict)
+    print("saved results to {}".format(directory))
+    pickle.dump
+
+def print_results():
+    global steps_goal, dist_mins, arc_lens, dist_relmins, anglediffs_tangent, RPYgoals, RPYmins, Rdiffs, Pdiffs, Ydiffs
+    steps_goal = np.array(steps_goal)
+    dist_mins = np.array(dist_mins)
+    arc_lens = np.array(arc_lens)
+    dist_relmins = np.array(dist_relmins)
+    anglediffs_tangent = np.array(anglediffs_tangent)
+    if RPYgoals:
+       RPYgoals = np.array(RPYgoals)
+       RPYmins = np.array(RPYmins)
+       Rdiffs = np.array(Rdiffs)
+       Pdiffs = np.array(Pdiffs)
+       Ydiffs = np.array(Ydiffs)
+    print("Goals reached {:3d}/{:3d}".format(goals_reached, total_episodes))
+    if args.retry: print("Goals reached after retries {:3d}/{:3d}".format(goals_reached+goals_reached_after_retries, total_episodes))
+    print("mean steps to goal: {:.2f}".format(steps_goal.mean()))
+    print("mean min dist in mm: {:.2f}".format(1000*dist_mins.mean()))
+    print("std min dist in mm: {:.2f}".format(1000*dist_mins.std()))
+    print("mean total arc len in mm {:.2f}".format(1000*arc_lens.mean()))
+    print("rel mean error based on arc len in %: {:.2f}".format(100*dist_relmins.mean()))
+    print("max of min dist in mm: {:.2f}".format(1000*np.max(dist_mins)))
+    print("abs mean tangent angle diff goal in deg: {:.2f}".format(180/np.pi*anglediffs_tangent.mean()))
+    print("max tangent angle diff goal in deg: {:.2f}".format(180/np.pi*np.max(anglediffs_tangent)))
+    if RPYgoals.all():
+       print("mean RPY diffs in deg: {:.2f} {:.2f} {:.2f}".format(180/np.pi*Rdiffs.mean(), 180/np.pi*Pdiffs.mean(), 180/np.pi*Ydiffs.mean()))
+       print("{}/{} {} {} {} {} {} {} {} {} {} {} {}".format(
+             goals_reached+goals_reached_after_retries, total_episodes, steps_goal.mean(),
+             1000*dist_mins.mean(), 1000*dist_mins.std(), 1000*arc_lens.mean(), 100*dist_relmins.mean(),
+             1000*np.max(dist_mins), 180/np.pi*anglediffs_tangent.mean(), 180/np.pi*np.max(anglediffs_tangent),
+             180/np.pi*Rdiffs.mean(), 180/np.pi*Pdiffs.mean(), 180/np.pi*Ydiffs.mean()
+             ))
+    else:
+       print("{}/{} {} {} {} {} {} {} {} {}".format(
+             goals_reached+goals_reached_after_retries, total_episodes, steps_goal.mean(),
+             1000*dist_mins.mean(), 1000*dist_mins.std(), 1000*arc_lens.mean(), dist_relmins.mean(),
+             1000*np.max(dist_mins), 180/np.pi*anglediffs_tangent.mean(), 180/np.pi*np.max(anglediffs_tangent)
+             ))
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -63,12 +112,12 @@ if __name__ == "__main__":
                         help='render_mode: "human" - 3D plot, "string" - print distances within episode, "" - no rendering')
     parser.add_argument('--save_frames', type=int, default=0,
                         help='Saves frames of human rendered environment if evaluated to True')
-    parser.add_argument('--analyze', type=int, default=0,
-                        help='True value indicates that rollouts should be analyzed')
+    parser.add_argument('--save_results', type=int, default=0,
+                        help='Saves .pickle and .mat file in directory of snapshot file if int(save_results) evaluates to True')
     parser.add_argument('--retry', type=int, default=0,
                         help='Integer indicating how many retries one episode should have \
                         to same goal with different starting position, in case goal is not reached:\
-                        0 - no retries; n+ - max of n retries')
+                        0 - no retries; n - max of n retries')
     parser.add_argument('--dependent_actuation', type=int, default=1,
                         help='Indicating the robot is actuated, 0 or 1 accepted values')
     args = parser.parse_args()
@@ -83,10 +132,15 @@ if __name__ == "__main__":
     cur_goal_reached = True
     cur_goal = None
     cur_tangent_vec_goal = None
-    if args.analyze:
-        ep_lens_goal_reached = []
-        dist_mins = []
-        diff_angles = []
+    # lists for analyzing performance
+    steps_goal = [] # steps needed to reach goal
+    dist_mins = [] # minimal distance to goal within episode
+    arc_lens = [] # total arc lengths at every episode at closest point to goal
+    dist_relmins = [] # minimal distances to goal within episode divided by total arc length
+    anglediffs_tangent = []
+    RPYgoals = []
+    RPYmins = []
+    Rdiffs, Pdiffs, Ydiffs = [], [], []
 
     test_data = None
     if args.test_batch_file:
@@ -101,7 +155,7 @@ if __name__ == "__main__":
         env = data['env'] # wrapped env, access TendonOneSegmentEnv with env._wrapped_env
         lengths=None; goal=None; tangent_vec_goal=None
 
-        print(policy._cached_param_shapes)
+        print("ANN shapes",policy._cached_param_shapes)
         print_env_info(env, env._wrapped_env)
 
         if hasattr(env._wrapped_env, "dependent_actuation"):
@@ -112,11 +166,9 @@ if __name__ == "__main__":
 
         if hasattr(env._wrapped_env, "rewardfn_num"):
            pass
-        else: env._wrapped_env.rewardfn_num = 1; print("Created rewardfn_num attribute for tendon env")
-
-#        if hasattr(env._wrapped_env, "eps"):
-#           pass
-#        else: env._wrapped_env.eps = 0.001; print("Created eps attribute for tendon env")
+        else:
+           env._wrapped_env.rewardfn_num = 1
+           print("Created rewardfn_num attribute for tendon env")
 
         # set max steps of environment to high value to test max performance of agent
 #        env._wrapped_env.max_steps = 70
@@ -128,39 +180,39 @@ if __name__ == "__main__":
                 goal=test_data["goal"][episode]
                 tangent_vec_goal=test_data["tangent_vec_goal"][episode]
 
-            path = rollout_tendon(env, policy, always_return_paths=True,
-                                  render_mode=args.render_mode,
-                                  save_frames=args.save_frames,
-                                  lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
-
-            if path["env_infos"]["info"]["goal"] == True: # goal reached
-#                print(env._wrapped_env.goal, env._wrapped_env.tip_vec2)
-#                print(norm(env._wrapped_env.goal-env._wrapped_env.tip_vec2))
-                if args.analyze:
-                    ep_lens_goal_reached.append(env._wrapped_env.steps)
-                    try:
-                       diff_angles.append(env._wrapped_env.get_diff_angle(degree=True))
-                    except:
-                       diff_angles.append(env._wrapped_env.get_diff_angles(degree=True)[2])
-                    goals_reached += 1
-                cur_goal_reached = True
-            else: # goal not reached
-                if args.analyze:
-                    dist_mins.append(env._wrapped_env.dist_min)
-                cur_goal_reached = False
-
-            if args.retry > 0 and cur_goal_reached == False:
-                goal_reached_retry= retry_ep(env._wrapped_env.goal,
-                                             env._wrapped_env.tangent_vec_goal,
-                                             args.retry, verbose=True)
-                goals_reached_after_retries += goal_reached_retry
-
+            path = rollout_tendon(
+                    env, policy, always_return_paths=True,
+                    render_mode=args.render_mode, save_frames=args.save_frames,
+                    lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
             episode += 1
 
-        if args.analyze:
-            eps = 1e-10
-            print("Goals reached {:3d}/{:3d}".format(goals_reached, total_episodes))
-            print("Goals reached after retries {:3d}/{:3d}".format(goals_reached+goals_reached_after_retries, total_episodes))
-            print("Average steps needed to reach goal: {:5.1f}.".format(sum(ep_lens_goal_reached)/(len(ep_lens_goal_reached)+eps)))
-            print("Average min distance from goal within one episode, when goal not reached: {:5.2f}mm.".format(1000*sum(dist_mins)/(len(dist_mins)+eps)))
-            print("Average angle difference when goal reached: {:5.2f}°.".format(sum(diff_angles)/(len(diff_angles)+eps)))
+            # Analyze episode and gather statistics
+            dist_mins.append(env._wrapped_env.dist_min)
+            arc_lens.append(env._wrapped_env.seg_len1+env._wrapped_env.seg_len2)
+            dist_relmins.append(env._wrapped_env.dist_min/(env._wrapped_env.seg_len1+env._wrapped_env.seg_len2))
+            anglediffs_tangent.append(env._wrapped_env.anglet_min)
+            try:
+               RPYgoals.append((env._wrapped_env.Rgoal, env._wrapped_env.Pgoal, env._wrapped_env.Ygoal))
+               RPYmins.append((env._wrapped_env.Rmin, env._wrapped_env.Pmin, env._wrapped_env.Ymin))
+               Rdiffs.append(np.sqrt((env._wrapped_env.Rgoal-env._wrapped_env.Rmin)**2))
+               Pdiffs.append(np.sqrt((env._wrapped_env.Pgoal-env._wrapped_env.Pmin)**2))
+               Ydiffs.append(np.sqrt((env._wrapped_env.Ygoal-env._wrapped_env.Ymin)**2))
+            except:
+               pass
+            if path["env_infos"]["info"]["goal"] == True: # goal reached
+                steps_goal.append(env._wrapped_env.steps)
+#                try:
+#                   anglediffs_tangent.append(env._wrapped_env.get_diff_angle(degree=True))
+#                except:
+#                   anglediffs_tangent.append(env._wrapped_env.get_diff_angles(degree=True)[2])
+                goals_reached += 1
+                cur_goal_reached = True
+            else: # goal not reached in this episode
+                cur_goal_reached = False
+
+        if args.save_results:
+            save_results(args.file)
+
+        print_results()
+
+

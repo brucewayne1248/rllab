@@ -69,6 +69,7 @@ class TendonTwoSegmentEnv(Env):
       self.info = {} # used to store adaditional environment data
       self.steps = None # current step the episode is in
       self.goal = None # goal to be reached by the robot's tip [x, y, z] [m]
+      self.goal_lengths = None # tendon lengths of generated goal
       self.tangent_vec_goal = None # tangent vector of goal position
       self.delta_l = 0.001 # max tendon length change per timestep
       self.max_steps = 100 # max steps per episode
@@ -103,28 +104,38 @@ class TendonTwoSegmentEnv(Env):
          while norm(self.goal-self.tip_vec2) < 2*self.eps:
             self.set_goal() # set a new goal for the episode
       elif goal is not None and tangent_vec_goal is not None: # create goal given by fn params
+         assert len(goal) == 3 and len(tangent_vec_goal) == 3
          self.goal = goal
          self.tangent_vec_goal = tangent_vec_goal
+      elif goal is not None and tangent_vec_goal is None: # this is the case when goal lenghts are given instead of point in workspace
+         assert len(goal) == 6
+         self.set_goal(goallengths=goal)
       else:
          raise NotImplementedError
 
       self._state = self.get_state()
       self.dist_start = norm(self.goal-self.tip_vec2)
       self.dist_min = self.dist_start
+      self.anglet_min = self.get_diff_angle()
       self.steps = 0
       self.info["str"] = "Reset the environment."
       self.info["goal"] = False
       return self._state
 
-   def set_goal(self):
+   def set_goal(self, goallengths=None):
       """ Sets the goal to a random point of the robot's workspace [x, y, z] in [m]
       and sets the tangent vector accordingly."""
-      l11goal = np.random.uniform(self.l1min, self.l1max)
-      l12goal = np.random.uniform(self.l1min, self.l1max)
-      l13goal = np.random.uniform(self.l1min, self.l1max)
-      l21goal = np.random.uniform(self.l2min, self.l2max)
-      l22goal = np.random.uniform(self.l2min, self.l2max)
-      l23goal = np.random.uniform(self.l2min, self.l2max)
+      if goallengths is None:
+         l11goal = np.random.uniform(self.l1min, self.l1max)
+         l12goal = np.random.uniform(self.l1min, self.l1max)
+         l13goal = np.random.uniform(self.l1min, self.l1max)
+         l21goal = np.random.uniform(self.l2min, self.l2max)
+         l22goal = np.random.uniform(self.l2min, self.l2max)
+         l23goal = np.random.uniform(self.l2min, self.l2max)
+      else:
+         l11goal = goallengths[0]; l12goal = goallengths[1]; l13goal = goallengths[2]
+         l21goal = goallengths[3]; l22goal = goallengths[4]; l23goal = goallengths[5]
+      self.goal_lengths = np.array([l11goal, l12goal, l13goal, l21goal, l22goal, l23goal])
       dl21goal = l21goal-l11goal; dl22goal = l22goal-l12goal; dl23goal = l23goal-l13goal
       kappa1, phi1, seg_len1 = self.arc_params(l11goal, l12goal, l13goal)
       kappa2, phi2, seg_len2 = self.arc_params(dl21goal, dl22goal, dl23goal)
@@ -219,6 +230,7 @@ class TendonTwoSegmentEnv(Env):
       self.new_dist_euclid = norm(self.new_dist_vec)
       if self.new_dist_euclid < self.dist_min: # update min distance within one episode
          self.dist_min = self.new_dist_euclid
+         self.anglet_min = self.get_diff_angle()
 
    def get_reward_done_info(self, new_dist_euclid, old_dist_euclid, steps):
       """returns reward, done, info dict after taking action"""
