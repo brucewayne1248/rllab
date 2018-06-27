@@ -288,8 +288,8 @@ class TendonTwoSegmentSE3Env(Env):
          rp = wsp*(-gamma*(dnew/dstart)**alpha + (dold/dstart)**alpha)
          ro = wso*(-gamma*(atnew/np.pi)**alpha + (atold/np.pi)**alpha)
       elif self.rewardfn_num == 3:
-         rp = -wpp*((dnew/dstart)**alpha)
-         ro = -wpo*((atnew/np.pi)**alpha)
+         rp = -wpp*((dnew/dstart)**alphap)
+         ro = -wpo*((atnew/np.pi)**alphao)
       elif self.rewardfn_num == 4:
          rp = -wlp*(dnew-dold)
          ro = -wlo*(atnew-atold)
@@ -297,8 +297,8 @@ class TendonTwoSegmentSE3Env(Env):
          rp = -wpp*(dnew/dstart)**alpha - wlp*(dnew-dold)
          ro = -wpo*(atnew/np.pi)**alpha - wlo*(atnew-atold)
       elif self.rewardfn_num == 6:
-         rp = 1-((dnew/dstart)**alpha)
-         ro = 1-((atnew/np.pi)**alpha)
+         rp = 1-wpp*((dnew/dstart)**alphap)
+         ro = 1-wpo*((atnew/np.pi)**alphao)
       elif self.rewardfn_num == 7:
          pass
       elif self.rewardfn_num == 8:
@@ -372,17 +372,14 @@ class TendonTwoSegmentSE3Env(Env):
       anglen = acos(np.dot(self.normal_vec2, self.normal_vec_goal)) / (norm(self.normal_vec2)*norm(self.normal_vec_goal))
       angleb = acos(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / (norm(self.binormal_vec2)*norm(self.binormal_vec_goal))
       anglet = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / (norm(self.tangent_vec2)*norm(self.tangent_vec_goal))
-      if degree:
-         return anglen*180/np.pi, angleb*180/np.pi, anglet*180/np.pi
-      else:
-         return anglen, angleb, anglet
+      return (anglen*180/np.pi, angleb*180/np.pi, anglet*180/np.pi) if degree else (anglen, angleb, anglet)
 
    def get_orientation(self, T, representation="eulerZYX", degree=False):
       T = np.array(T)
       if representation == "eulerZYX":
-      # R = R_x(theta1) R_y(theta2) R_z(theta3) corresponds to RPY - theta1 = PHI - R, theta2 = Theta - P, theta3 = Psi - Y
+      # R = R_x(theta1) R_y(theta2) R_z(theta3) corresponds to RPY - theta1 = PHI/R, theta2 = Theta/P, theta3 = Psi/Y
       # See https://pdfs.semanticscholar.org/6681/37fa4b875d890f446e689eea1e334bcf6bf6.pdf
-      # Should handle the singularity at theta2 +- pi/2
+      # handles the singularity at theta2 +- pi/2 by setting theta1 = 0 and theta3 accounts for whole rotation
          theta1 = atan2(T[1,2], T[2,2])
          c2 = sqrt(T[0,0]**2+T[0,1]**2)
          theta2 = atan2(-T[0,2], c2)
@@ -478,7 +475,8 @@ class TendonTwoSegmentSE3Env(Env):
    def init_render(self):
       """ sets up 3d plot """
       plt.ion() # interactive plot mode, panning, zooming enabled
-      self.fig = plt.figure(figsize=(1.5*9.5,1.5*7.2))
+      self.fig = plt.figure(figsize=(1.25*9.5,1.25*7.2))
+#      self.fig = plt.figure(figsize=(19.2,16.8))
       self.ax = self.fig.add_subplot(111, projection="3d") # attach z-axis to plot
       # set axis limits and labels
       self.ax.set_xlim([-0.5*self.l2max, 0.5*self.l2max])

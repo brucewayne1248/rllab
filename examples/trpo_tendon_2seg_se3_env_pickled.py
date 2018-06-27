@@ -24,17 +24,18 @@ def run_task(*_):
          baseline=baseline,
          batch_size = 4000,
          max_path_length=np.inf,
-         n_itr=40001,
+         n_itr=5,
          discount=0.99,
          step_size=0.01,
+         gae_lambda=0.95,
    )
    algo.train()
 
 run_experiment_lite(
       run_task,
       n_parallel=2,
-      exp_name="se3_r2_01",
+      exp_name="GAEtest",
       snapshot_mode="gap",
-      snapshot_gap=100,
+      snapshot_gap=1,
       seed=1,
  )

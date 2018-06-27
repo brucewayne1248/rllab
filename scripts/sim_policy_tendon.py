@@ -33,17 +33,17 @@ def print_env_info(env, env_wrapped):
       print("dependent_actuation:", env_wrapped.dependent_actuation)
    print("goals: {}/{}".format(env_wrapped.total_goals_reached, env_wrapped.total_episodes))
 
-def retry_ep(goal, tangent_vec_goal, max_retries, verbose=False):
+def retry_ep(goal, tangent_vec_goal, max_retries=1, verbose=False):
     lengths = None
     for retry in range(max_retries):
         path = rollout_tendon(env, policy, always_return_paths=True,
-                              render_mode=args.render_mode,
-                              save_frames=args.save_frames,
+                              render_mode="human",
+                              save_frames=1,
                               lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
 
-        if env._wrapped_env.dist_end < env._wrapped_env.eps: break
+        if env._wrapped_env.info["goal"] == True: break
 
-    if env._wrapped_env.dist_end < env._wrapped_env.eps: # goal reached
+    if env._wrapped_env.info["goal"] == True: # goal reached
         if verbose: print("Goal reached after {} retries.".format(retry+1))
         return True
     else:
@@ -58,7 +58,7 @@ def save_results(filename):
     with open(directory+"/benchmark.pkl", "wb") as f:
         pickle.dump(result_dict, f)
     scipy.io.savemat(directory+"/benchmark.mat", mdict=result_dict)
-    print("saved results to {}".format(directory))
+    print("saved benchmark.pkl and benchmark.mat to {}".format(directory))
     pickle.dump
 
 def print_results():
@@ -84,7 +84,7 @@ def print_results():
     print("max of min dist in mm: {:.2f}".format(1000*np.max(dist_mins)))
     print("abs mean tangent angle diff goal in deg: {:.2f}".format(180/np.pi*anglediffs_tangent.mean()))
     print("max tangent angle diff goal in deg: {:.2f}".format(180/np.pi*np.max(anglediffs_tangent)))
-    if RPYgoals.all():
+    if RPYgoals.size:
        print("mean RPY diffs in deg: {:.2f} {:.2f} {:.2f}".format(180/np.pi*Rdiffs.mean(), 180/np.pi*Pdiffs.mean(), 180/np.pi*Ydiffs.mean()))
        print("{}/{} {} {} {} {} {} {} {} {} {} {} {}".format(
              goals_reached+goals_reached_after_retries, total_episodes, steps_goal.mean(),
@@ -95,7 +95,7 @@ def print_results():
     else:
        print("{}/{} {} {} {} {} {} {} {} {}".format(
              goals_reached+goals_reached_after_retries, total_episodes, steps_goal.mean(),
-             1000*dist_mins.mean(), 1000*dist_mins.std(), 1000*arc_lens.mean(), dist_relmins.mean(),
+             1000*dist_mins.mean(), 1000*dist_mins.std(), 1000*arc_lens.mean(), 100*dist_relmins.mean(),
              1000*np.max(dist_mins), 180/np.pi*anglediffs_tangent.mean(), 180/np.pi*np.max(anglediffs_tangent)
              ))
 
@@ -135,12 +135,14 @@ if __name__ == "__main__":
     # lists for analyzing performance
     steps_goal = [] # steps needed to reach goal
     dist_mins = [] # minimal distance to goal within episode
+    dists_start = []
     arc_lens = [] # total arc lengths at every episode at closest point to goal
     dist_relmins = [] # minimal distances to goal within episode divided by total arc length
     anglediffs_tangent = []
     RPYgoals = []
     RPYmins = []
     Rdiffs, Pdiffs, Ydiffs = [], [], []
+    paths = []
 
     test_data = None
     if args.test_batch_file:
@@ -174,6 +176,12 @@ if __name__ == "__main__":
 #        env._wrapped_env.max_steps = 70
 #        print("NEW MAX STEPS", env._wrapped_env.max_steps )
 
+        env._wrapped_env.frame = 10000
+
+
+#        env._wrapped_env.eps_dist = 0.002
+#        env._wrapped_env.eps_angle = 3.5*np.pi/180
+
         while episode < total_episodes:
             if test_data is not None: # set starting lengths and goal according to test batch
                 lengths=test_data["lengths"][episode]
@@ -187,10 +195,20 @@ if __name__ == "__main__":
             episode += 1
 
             # Analyze episode and gather statistics
+#            if env._wrapped_env.anglet_min > 50*np.pi/180:
+#               print(env._wrapped_env.goal_lengths, env._wrapped_env.dist_min)
+#               print("RETRY SAME GOAL")
+#               retry_ep(env._wrapped_env.goal, env._wrapped_env.tangent_vec_goal, 1)
+#               jitter = np.random.uniform(-0.05, 0.05, 3)
+#               print("RETRY JITTER GOAL")
+#               retry_ep(env._wrapped_env.goal+jitter, env._wrapped_env.tangent_vec_goal, 1)
+#               paths.append(path)
+
             dist_mins.append(env._wrapped_env.dist_min)
             arc_lens.append(env._wrapped_env.seg_len1+env._wrapped_env.seg_len2)
             dist_relmins.append(env._wrapped_env.dist_min/(env._wrapped_env.seg_len1+env._wrapped_env.seg_len2))
             anglediffs_tangent.append(env._wrapped_env.anglet_min)
+            dists_start.append(env._wrapped_env.dist_start)
             try:
                RPYgoals.append((env._wrapped_env.Rgoal, env._wrapped_env.Pgoal, env._wrapped_env.Ygoal))
                RPYmins.append((env._wrapped_env.Rmin, env._wrapped_env.Pmin, env._wrapped_env.Ymin))
@@ -201,10 +219,6 @@ if __name__ == "__main__":
                pass
             if path["env_infos"]["info"]["goal"] == True: # goal reached
                 steps_goal.append(env._wrapped_env.steps)
-#                try:
-#                   anglediffs_tangent.append(env._wrapped_env.get_diff_angle(degree=True))
-#                except:
-#                   anglediffs_tangent.append(env._wrapped_env.get_diff_angles(degree=True)[2])
                 goals_reached += 1
                 cur_goal_reached = True
             else: # goal not reached in this episode
@@ -214,5 +228,3 @@ if __name__ == "__main__":
             save_results(args.file)
 
         print_results()
-
-
