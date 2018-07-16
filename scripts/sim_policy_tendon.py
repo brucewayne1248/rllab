@@ -3,9 +3,10 @@ import os
 import joblib
 import tensorflow as tf
 import pickle, scipy.io
-
+import logging
 import numpy as np
 from rllab.sampler.utils import rollout_tendon
+
 
 def print_env_info(env, env_wrapped):
 #   print(vars(env))
@@ -59,7 +60,6 @@ def save_results(filename):
         pickle.dump(result_dict, f)
     scipy.io.savemat(directory+"/benchmark.mat", mdict=result_dict)
     print("saved benchmark.pkl and benchmark.mat to {}".format(directory))
-    pickle.dump
 
 def print_results():
     global steps_goal, dist_mins, arc_lens, dist_relmins, anglediffs_tangent, RPYgoals, RPYmins, Rdiffs, Pdiffs, Ydiffs
@@ -176,7 +176,7 @@ if __name__ == "__main__":
 #        env._wrapped_env.max_steps = 70
 #        print("NEW MAX STEPS", env._wrapped_env.max_steps )
 
-        env._wrapped_env.frame = 10000
+#        env._wrapped_env.frame = 10000
 
 
 #        env._wrapped_env.eps_dist = 0.002

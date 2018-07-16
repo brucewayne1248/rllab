@@ -47,7 +47,8 @@ def rollout(env, agent, max_path_length=np.inf, animated=False, speedup=1,
 def rollout_tendon(env, agent, always_return_paths=True,
                    render_mode="", save_frames=False,
                    lengths=None, goal=None, tangent_vec_goal=None):
-    """adjusted rollout method"""
+    """adjusted rollout method
+    agent=policy"""
     observations = []
     actions = []
     rewards = []
@@ -66,7 +67,7 @@ def rollout_tendon(env, agent, always_return_paths=True,
     if render_mode:
         env.render(mode=render_mode, save_frames=save_frames)
     while True:
-        a, agent_info = agent.get_action(o)
+        a, agent_info = agent.get_action(o) # agent = policy
         next_o, r, d, env_info = env.step(a)
         observations.append(env.observation_space.flatten(o))
         rewards.append(r)

@@ -14,6 +14,8 @@ def run_task(*_):
          env_spec = env.spec,
          hidden_sizes=(64, 64)
 #         output_nonlinearity=NL.tanh
+         #  std_hidden_nonlinearity=NL.rectify,
+         #  hidden_nonlinearity=NL.rectify,
    )
 
    baseline = LinearFeatureBaseline(env_spec=env.spec)

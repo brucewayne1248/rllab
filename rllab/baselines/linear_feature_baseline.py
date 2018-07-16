@@ -17,10 +17,10 @@ class LinearFeatureBaseline(Baseline):
         self._coeffs = val
 
     def _features(self, path):
-        o = np.clip(path["observations"], -10, 10)
+        o = np.clip(path["observations"], -10, 10) # clips observations between -10 and 10
         l = len(path["rewards"])
-        al = np.arange(l).reshape(-1, 1) / 100.0
-        return np.concatenate([o, o ** 2, al, al ** 2, al ** 3, np.ones((l, 1))], axis=1)
+        al = np.arange(l).reshape(-1, 1) / 100.0 # column vector dim(path) containing steps divided by 100 [0.01, 0.02 ... T/100]
+        return np.concatenate([o, o ** 2, al, al ** 2, al ** 3, np.ones((l, 1))], axis=1) # linear feature vector consisting of row vectors of each feature
 
     @overrides
     def fit(self, paths):

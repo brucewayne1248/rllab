@@ -6,7 +6,7 @@ import theano.tensor as TT
 import theano
 import itertools
 import numpy as np
-from rllab.misc.ext import sliced_fun
+from rllab.misc.ext import sliced_fun # Divide function f's inputs into several slices. Evaluate f on those slices, and then average the result. It is useful when memory is not enough to process all data at once.
 from _ast import Num
 
 

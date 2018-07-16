@@ -29,13 +29,16 @@ if __name__=="__main__":
    dist_mins = np.array(benchmark["dist_mins"])
    anglediffs_tangent = np.array(benchmark["anglediffs_tangent"])
 
-   n = 250
+#   n = len(dist_mins)
+   n = 750
    width = 4
    height = 8
 
-   dist_relmins_samples = np.random.choice(dist_relmins, n, replace=False)
-   dist_mins_samples = np.random.choice(dist_mins, n, replace=False)
-   anglediffs_tangent_samples = np.random.choice(anglediffs_tangent, n, replace=False)
+   idx = np.random.choice(np.arange(len(dist_mins)), n, replace=False)
+
+   dist_relmins_samples = dist_relmins[idx]
+   dist_mins_samples = dist_mins[idx]
+   anglediffs_tangent_samples = anglediffs_tangent[idx]
 
    plt.figure(figsize=[width,height])
    plt.rcParams["axes.grid.axis"] = "y"

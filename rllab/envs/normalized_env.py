@@ -79,8 +79,8 @@ class NormalizedEnv(ProxyEnv, Serializable):
         if isinstance(self._wrapped_env.action_space, Box):
             # rescale the action
             lb, ub = self._wrapped_env.action_space.bounds
-            scaled_action = lb + (action + 1.) * 0.5 * (ub - lb)
-            scaled_action = np.clip(scaled_action, lb, ub)
+            scaled_action = lb + (action + 1.) * 0.5 * (ub - lb) # a is not scaled, takes -ve and +ve values
+            scaled_action = np.clip(scaled_action, lb, ub) # clips the action to lower and upper bounds
         else:
             scaled_action = action
         wrapped_step = self._wrapped_env.step(scaled_action)
