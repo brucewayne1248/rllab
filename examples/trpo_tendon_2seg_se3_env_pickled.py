@@ -24,12 +24,12 @@ def run_task(*_):
          env=env,
          policy=policy,
          baseline=baseline,
-         batch_size = 4000,
+         batch_size = 75000,
          max_path_length=np.inf,
-         n_itr=5,
+         n_itr=10001,
          discount=0.99,
          step_size=0.01,
-         gae_lambda=0.95,
+         gae_lambda=1,
    )
    algo.train()
 

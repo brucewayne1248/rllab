@@ -27,9 +27,9 @@ class TendonTwoSegmentEnv(Env):
       self.l2min = 0.185
       self.l2max = 0.215
       self.d = 0.01
-      self.n = 10
+      self.n = 5
       self.dependent_actuation = True # I like dependent! indicates the way change of tendon lenghts interact with robot
-      self.rewardfn_num = 2 # number of chosen reward fn
+      self.rewardfn_num = 10 # number of chosen reward fn
 
       self.base = np.array([0.0, 0.0, 0.0, 1.0]) # base vector used for transformations
       self.l11 = None; self.l12 = None; self.l13 = None; # tendon lengths
@@ -237,6 +237,10 @@ class TendonTwoSegmentEnv(Env):
       done = False
       alpha = 0.4; c1 = 1; c2 = 100; gamma=0.99; cpot = 50 # reward function params
       # regular step without terminating episode
+      wl = 1 # 'w'eight for 'l'inear distance reward
+      beta = 0.4 # exponent for sqrt distance potential
+      wls = 100 # 'w'eight for 'l'inear reward 's'haping
+      wps = 100 # 'w'eight for 'p'otential reward 's'haping
       if self.rewardfn_num == 1:
          reward = -1+cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
                            + (old_dist_euclid/self.dist_start)**alpha)
@@ -263,6 +267,20 @@ class TendonTwoSegmentEnv(Env):
                           +((old_dist_euclid/self.dist_start)**alpha))
       elif self.rewardfn_num == 9:
          reward = 1-((new_dist_euclid/self.eps)**alpha)
+      elif self.rewardfn_num == 10: # linear
+         reward = -wl * new_dist_euclid
+      elif self.rewardfn_num == 11: # potential
+         reward = -((new_dist_euclid/self.eps)**beta)
+      elif self.rewardfn_num == 12: # linear shaping discounted
+         reward = -wls * (gamma * new_dist_euclid - old_dist_euclid)
+      elif self.rewardfn_num == 13: # linear shaping undiscounted
+         reward = -wls * (new_dist_euclid - old_dist_euclid)
+      elif self.rewardfn_num == 14: # potential shaping discounted
+         reward = -wps * (gamma * ((new_dist_euclid/self.eps)**beta) - ((old_dist_euclid/self.eps)**beta))
+      elif self.rewardfn_num == 15: # potential shaping undiscounted
+         reward = -wps * (((new_dist_euclid/self.eps)**beta) - ((old_dist_euclid/self.eps)**beta))
+      elif self.rewardfn_num == 16:
+         reward = 1-((new_dist_euclid/self.eps)**beta)
 
       """R7 like R5 but leave out gamma_t at the bottom"""
 

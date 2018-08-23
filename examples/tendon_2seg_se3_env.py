@@ -4,9 +4,36 @@ from rllab.spaces import Box
 from rllab.utils.plot_utils import Arrow3D, plot_loop_pause
 
 import numpy as np
+import quaternion
 from numpy.linalg import norm
 from math import sqrt, asin, atan2, cos, sin, acos
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+
+#def quaternion_multiplication(x, y):
+#   x = quaternion.as_float_array(x)
+#   y = quaternion.as_float_array(y)
+#   x0 = x[0]; x1 = x[1]; x2 = x[2]; x3 = x[3];
+#   y0 = y[0]; y1 = y[1]; y2 = y[2]; y3 = y[3];
+#
+#   q0 = x0*y0 - x1*y1 - x2*y2 -x3*y3
+#   q1 = x0*y1 + x1*y0 + x2*y3 - x3*y2
+#   q2 = x0*y2 - x1*y3 + x2*y0 + x3*y1
+#   q3 = x0*y3 + x1*y2 - x2*y1 + x3*y0
+#   return np.quaternion(q0, q1, q2, q3)
+#
+#def dot_quat(x,y):
+#   if type(x) == quaternion.quaternion:
+#      print("conversion")
+#      x = quaternion.as_float_array(x)
+#   else:
+#      x = np.array(x)
+#   if type(y) == quaternion.quaternion:
+#      y = quaternion.as_float_array(y)
+#   else:
+#      y = np.array(y)
+#   return np.abs(np.dot(x, y))
 
 class TendonTwoSegmentSE3Env(Env):
    """
@@ -28,7 +55,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.l2min = 0.185
       self.l2max = 0.215
       self.d = 0.01
-      self.n = 10
+      self.n = 5
       self.dependent_actuation = True
       self.rewardfn_num = 9 # choose which reward fn should be used
 
@@ -120,7 +147,7 @@ class TendonTwoSegmentSE3Env(Env):
          self.goal = self.tip_vec2
          while norm(self.goal-self.tip_vec2) < 2*self.eps_dist:
             self.set_goal() # set a new goal for the episode
-      elif goal is not None and tangent_vec_goal is not None: # create goal given by fn params
+      elif goal is not None and tangent_vec_goal is not None: # create goal given by goal and tangent_vec_goal
          assert len(goal) == 3 and len(tangent_vec_goal) == 3
          self.goal = goal
          self.tangent_vec_goal = tangent_vec_goal
@@ -130,13 +157,18 @@ class TendonTwoSegmentSE3Env(Env):
       else:
          raise NotImplementedError
 
+      self.tip_vec2min = self.tip_vec2
       self.dist_start = norm(self.goal-self.tip_vec2)
       self.dist_min = self.dist_start
+      self.closest_lengths = np.array([self.l11, self.l12, self.l13, self.l21, self.l22, self.l23])
 
       self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles() # angles between vectors
       self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
 
       self.Rmin, self.Pmin, self.Ymin = self.get_orientation(self.T02)
+
+      self.qmin = quaternion.as_float_array(quaternion.from_rotation_matrix(self.T02))
+      self.qmin = np.sign(self.qmin[0]) * self.qmin
 
       self._state = self.get_state()
 
@@ -169,6 +201,10 @@ class TendonTwoSegmentSE3Env(Env):
       self.normal_vec_goal = T02[0:3, 0]
       self.binormal_vec_goal = T02[0:3, 1]
       self.tangent_vec_goal =  T02[0:3, 2]
+      # quaternions
+      self.qgoal = quaternion.as_float_array(quaternion.from_rotation_matrix(T02[:3, :3]))
+      if np.sign(self.qgoal[0]) != 0.0:
+         self.qgoal = np.sign(self.qgoal[0]) * self.qgoal # make sure that quaternions all have the same sign for w
       # calculate RPY angles of goal here or quaternion
       self.Rgoal, self.Pgoal, self.Ygoal = self.get_orientation(T02)
 
@@ -258,9 +294,14 @@ class TendonTwoSegmentSE3Env(Env):
       self.dist_euclid_new = norm(self.dist_vec_new)
       self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles()
       if self.dist_euclid_new < self.dist_min: # update min distance within one episode
+         self.tip_vec2min = self.tip_vec2
+         self.closest_lengths = np.array([self.l11, self.l12, self.l13, self.l21, self.l22, self.l23])
          self.dist_min = self.dist_euclid_new
          self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
          self.Rmin, self.Pmin, self.Ymin = self.get_orientation(self.T02)
+         self.qmin = quaternion.as_float_array(quaternion.from_rotation_matrix(self.T02[:3, :3]))
+         if np.sign(self.qmin[0]) != 0.0:
+            self.qmin *= np.sign(self.qmin[0])
 
    def get_reward_done_info(self):
       """returns reward, done, info dict after taking action"""
@@ -335,7 +376,6 @@ class TendonTwoSegmentSE3Env(Env):
                                .format(self.max_steps, 1000*self.dist_end, 1000*(dstart-self.dist_end))
 #      gamma_t = 1-(self.steps/(self.max_steps+1))
 #      reward = gamma_t*reward
-#      print("d: {:4.2f} rp: {:4.2f} a: {:4.2f} ro: {:4.2f} r: {:4.2f}".format(dnew*1000, rp, atnew*180/np.pi, ro, reward))
       return reward, done, self.info
 
    def arc_params(self, l1, l2, l3):
@@ -369,9 +409,10 @@ class TendonTwoSegmentSE3Env(Env):
 
    def get_diff_angles(self, degree=False):
       """Returns the angles between normal, binormal, and tangent vector of goal and robot orientation"""
-      anglen = acos(np.dot(self.normal_vec2, self.normal_vec_goal)) / (norm(self.normal_vec2)*norm(self.normal_vec_goal))
-      angleb = acos(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / (norm(self.binormal_vec2)*norm(self.binormal_vec_goal))
-      anglet = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / (norm(self.tangent_vec2)*norm(self.tangent_vec_goal))
+      anglen = acos(np.dot(self.normal_vec2, self.normal_vec_goal)) / ((norm(self.normal_vec2)*norm(self.normal_vec_goal)) + 1e-8)
+#      print(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / ((norm(self.binormal_vec2)*norm(self.binormal_vec_goal)) +1e-8)
+      angleb = acos(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / ((norm(self.binormal_vec2)*norm(self.binormal_vec_goal)) +1e-8)
+      anglet = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / ((norm(self.tangent_vec2)*norm(self.tangent_vec_goal)) + 1e-8)
       return (anglen*180/np.pi, angleb*180/np.pi, anglet*180/np.pi) if degree else (anglen, angleb, anglet)
 
    def get_orientation(self, T, representation="eulerZYX", degree=False):
@@ -394,57 +435,86 @@ class TendonTwoSegmentSE3Env(Env):
          theta3 = atan2(T[2,1]/sin(theta2), -T[2,0]/sin(theta2))
       return (theta1*180/np.pi, theta2*180/np.pi, theta3*180/np.pi) if degree else (theta1, theta2, theta3)
 
-   def render(self, mode="human", pause=0.0000000001, save_frames=False):
+   def render(self, mode="human", pause=0.0000000001, save_frames=False, render_coordinate_frames=True,
+              render_spacer_discs=False, render_goal=True, render_legend=True,
+              render_segment1=True, render_segment2=True,
+              render_axes=True, render_grid=True, xlim=None, ylim=None, zlim=None, view=None,
+              num_points=25):
       """ renders the 3d plot of the robot's arc, pause (float) determines how long each frame is shown
           when save frames is set to True each frame of the plot is saved in an png file"""
+      lw = 4.5
+
       if self.steps % 5 == 0 and mode=="string":
          print("STEP {:3d}\tDISTANCE: {:5.2f}mm".format(self.steps, 1000*norm(self.goal-self.tip_vec2)))
       elif mode=="human":
          if self.fig == None:
             self.init_render()
 
+         if render_axes is False:
+            self.ax._axis3don = False
+
+         if xlim is not None:
+            self.ax.set_xlim(xlim)
+            self.ax.set_ylim(ylim)
+            self.ax.set_zlim(zlim)
+
+         if view is not None:
+            self.ax.view_init(elev=view[0], azim=view[1])
+
+
          points1, points2 = self.points_on_arc(100) # points to be plotted from base to robot's tip
 
          while self.ax.lines:
              self.ax.lines.pop() # delete plots of previous frame
-         self.ax.plot(points1[:,0], points1[:,1], points1[:,2], label="Segment 1", c="black", linewidth=3)
-         self.ax.plot(points2[:,0], points2[:,1], points2[:,2], label="Segment 2", c="grey", linewidth=2)
-#         self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], linestyle=None, label="Ziel", c="magenta", marker="x", markersize=11)
-         self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], label="Ziel", c="magenta", marker="x", markersize=11)
-         self.ax.legend()
+         if render_segment2:
+            self.ax.plot(points2[:,0], points2[:,1], points2[:,2], label="Segment 2", c="k", linewidth=lw)
+         if render_segment1:
+            self.ax.plot(points1[:,0], points1[:,1], points1[:,2], label="Segment 1", c="black", linewidth=lw)
+         if render_goal:
+            self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], linestyle=None, label="Ziel", c="magenta", marker="o", markersize=11)
+#            self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], label="Ziel", c="magenta", marker="x", markersize=11)
+         if render_legend: self.ax.legend()
+
+         # clear spacer discs
+         self.ax.collections.clear() # clear previous spacer disc polygons
 
          # delete arrows of previous frame, except base frame
          while len(self.ax.artists) > 3:
              self.ax.artists.pop()
          # add coordinate frames to plot
-         anormal1 = self.create_arrow(self.tip_vec1, self.normal_vec1, self.arrow_len,
-                                      "-|>", self.arrow_lw, self.arrow_ms, c="r")
-         abinormal1 = self.create_arrow(self.tip_vec1, self.binormal_vec1, self.arrow_len,
-                                        "-|>", self.arrow_lw, self.arrow_ms, c="g")
-         atangent1 = self.create_arrow(self.tip_vec1, self.tangent_vec1, self.arrow_len,
-                                       "-|>", self.arrow_lw, self.arrow_ms, c="b")
-         anormal2 = self.create_arrow(self.tip_vec2, self.normal_vec2, self.arrow_len,
-                                      "-|>", self.arrow_lw, self.arrow_ms, c="r")
-         abinormal2 = self.create_arrow(self.tip_vec2, self.binormal_vec2, self.arrow_len,
-                                        "-|>", self.arrow_lw, self.arrow_ms, c="g")
-         atangent2 = self.create_arrow(self.tip_vec2, self.tangent_vec2, self.arrow_len,
-                                       "-|>", self.arrow_lw, self.arrow_ms, c="b")
-         self.ax.add_artist(anormal1)
-         self.ax.add_artist(abinormal1)
-         self.ax.add_artist(atangent1)
-         self.ax.add_artist(anormal2)
-         self.ax.add_artist(abinormal2)
-         self.ax.add_artist(atangent2)
+         if render_segment1:
+            anormal1 = self.create_arrow(self.tip_vec1, self.normal_vec1, self.arrow_len,
+                                         "-|>", self.arrow_lw, self.arrow_ms, c="r")
+            abinormal1 = self.create_arrow(self.tip_vec1, self.binormal_vec1, self.arrow_len,
+                                           "-|>", self.arrow_lw, self.arrow_ms, c="g")
+            atangent1 = self.create_arrow(self.tip_vec1, self.tangent_vec1, self.arrow_len,
+                                          "-|>", self.arrow_lw, self.arrow_ms, c="b")
+            self.ax.add_artist(anormal1)
+            self.ax.add_artist(abinormal1)
+            self.ax.add_artist(atangent1)
+         if render_segment2:
+            anormal2 = self.create_arrow(self.tip_vec2, self.normal_vec2, self.arrow_len,
+                                         "-|>", self.arrow_lw, self.arrow_ms, c="r")
+            abinormal2 = self.create_arrow(self.tip_vec2, self.binormal_vec2, self.arrow_len,
+                                           "-|>", self.arrow_lw, self.arrow_ms, c="g")
+            atangent2 = self.create_arrow(self.tip_vec2, self.tangent_vec2, self.arrow_len,
+                                          "-|>", self.arrow_lw, self.arrow_ms, c="b")
+            self.ax.add_artist(anormal2)
+            self.ax.add_artist(abinormal2)
+            self.ax.add_artist(atangent2)
          # tangent vector indicating orientation of goal point
-         anormal_goal = self.create_arrow(self.goal, self.normal_vec_goal, self.arrow_len,
-                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="r")
-         abinormal_goal = self.create_arrow(self.goal, self.binormal_vec_goal, self.arrow_len,
-                                          "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="g")
-         atangent_goal = self.create_arrow(self.goal, self.tangent_vec_goal, self.arrow_len,
-                                           "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="b")
-         self.ax.add_artist(anormal_goal)
-         self.ax.add_artist(abinormal_goal)
-         self.ax.add_artist(atangent_goal)
+         if render_goal:
+#            anormal_goal = self.create_arrow(self.goal, self.normal_vec_goal, self.arrow_len,
+#                                             "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="r")
+#            abinormal_goal = self.create_arrow(self.goal, self.binormal_vec_goal, self.arrow_len,
+#                                             "-|>", 0.75*self.arrow_lw, self.arrow_ms, c="g")
+            atangent_goal = self.create_arrow(self.goal, self.tangent_vec_goal, self.arrow_len,
+                                              "-|>", self.arrow_lw, self.arrow_ms, c=[0.2, 0.2, 1])
+#            self.ax.add_artist(anormal_goal)
+#            self.ax.add_artist(abinormal_goal)
+            self.ax.add_artist(atangent_goal)
+
+         if render_spacer_discs: self.render_spacer_discs(render_segment2, num_points)
 
          plot_loop_pause(pause) # updates plot without losing window focus
          if save_frames == True:
@@ -472,6 +542,115 @@ class TendonTwoSegmentSE3Env(Env):
                   arrowstyle=astyle, lw=alw, mutation_scale=ams, color=c)
       return a
 
+   def render_spacer_discs(self, render_segment2, num_points=25):
+      if num_points < 13 or (num_points-1) % 12 is not 0:
+         num_points = 25 # minimum amount of points has to be num_points = k*12 + 1
+      lw = 1
+      enlarge_factor = 1.1
+      r = enlarge_factor * self.d
+      alpha = 0.5 # opacity for spacer discs
+      n = self.n # number of spacer discs
+      thickness = 0.002 # of spacer discs
+
+      color_segment1 = [0.00000,0.313725,0.607843] # imes blue
+      color_segment2 = [0.90588235,0.48235,0.160784] # imes green
+      # indexes used to plot tendons between spacer discs
+      degree_step = 2*np.pi / (num_points-1)
+      idx1 = round(1/2*np.pi / degree_step)
+      idx2 = round(7/6*np.pi / degree_step)
+      idx3 = round(11/6*np.pi / degree_step)
+
+      phi_values = np.linspace(0, 2*np.pi, num_points)
+      base_points = np.zeros((num_points, 3))
+      s_values = np.linspace(0.0, self.seg_len1, n)
+      for i in range(num_points):
+         x = r * cos(phi_values[i])
+         y = r * sin(phi_values[i])
+         base_points[i] = [x, y, 0]
+      base_points_transform = np.hstack((base_points, np.ones((num_points, 1), dtype=np.float32)))
+      ########## segment 1 spacer discs ##########
+      rect = np.zeros((4,3)) # used to create polygons of cylinder's shell
+      centers = np.zeros((num_points, 3))
+      tops = np.zeros((num_points, 3))
+      bottoms = np.zeros((num_points, 3))
+      centers_old = np.zeros((num_points, 3))
+      tops_old = np.zeros((num_points, 3))
+      bottoms_old = np.zeros((num_points, 3))
+      for i in range(n):
+         T = self.transformation_matrix(self.kappa1, self.phi1, s_values[i])
+         tan_vec = T[:3, 2]
+         for j in range(num_points):
+            centers[j] = np.matmul(T, base_points_transform[j])[:3]
+            tops[j] = centers[j] + 0.5*thickness*tan_vec
+            bottoms[j] = centers[j] - 0.5*thickness*tan_vec
+         for k in range(num_points-1):
+            # render shell of cylinder/spacer discs
+            rect[0] = bottoms[k]
+            rect[1] = bottoms[k+1]
+            rect[2] = tops[k+1]
+            rect[3] = tops[k]
+            verts = [list(zip(rect[:,0], rect[:,1], rect[:,2]))]
+            collection = Poly3DCollection(verts, facecolors=color_segment1, alpha=alpha)
+            collection.set_facecolor(color_segment1)
+            self.ax.add_collection3d(collection)
+         # bottom and top polygons of spacer discs
+         verts = [list(zip(bottoms[:,0], bottoms[:,1], bottoms[:,2]))]
+         collection = Poly3DCollection(verts, color=color_segment1, alpha=alpha)
+         collection.set_edgecolor('k')
+         collection.set_facecolor(color_segment1)
+         self.ax.add_collection3d(collection)
+         verts = [list(zip(tops[:,0], tops[:,1], tops[:,2]))]
+         collection = Poly3DCollection(verts, color=color_segment1, alpha=alpha)
+         collection.set_edgecolor('k')
+         collection.set_facecolor(color_segment1)
+         self.ax.add_collection3d(collection)
+         ########## segment 1 tendons ##########
+         if i > 0:
+            self.ax.plot([tops_old[idx1, 0], bottoms[idx1, 0]], [tops_old[idx1, 1], bottoms[idx1, 1]], [tops_old[idx1, 2], bottoms[idx1, 2]], color="k", linewidth=lw)
+            self.ax.plot([tops_old[idx2, 0], bottoms[idx2, 0]], [tops_old[idx2, 1], bottoms[idx2, 1]], [tops_old[idx2, 2], bottoms[idx2, 2]], color="k", linewidth=lw)
+            self.ax.plot([tops_old[idx3, 0], bottoms[idx3, 0]], [tops_old[idx3, 1], bottoms[idx3, 1]], [tops_old[idx3, 2], bottoms[idx3, 2]], color="k", linewidth=lw)
+         tops_old = tops.copy()
+      ########## segment 2 spacer discs ##########
+      if render_segment2:
+         s_values = np.linspace(0, self.seg_len2, n+1)
+   #      for i in range(num_points):
+   #         base_points_transform[i] = np.matmul(self.T01, base_points_transform[i])
+         for i in range(1, n+1):
+            T = np.matmul(self.T01, self.transformation_matrix(self.kappa2, self.phi2, s_values[i]))
+            tan_vec = T[:3, 2]
+            for j in range(num_points):
+   #            centers[j] = np.matmul(self.T01, np.matmul(T, base_points_transform[j]))[:3]
+               centers[j] = np.matmul(T, base_points_transform[j])[:3]
+               tops[j] = centers[j] + 0.5*thickness*tan_vec
+               bottoms[j] = centers[j] - 0.5*thickness*tan_vec
+            for k in range(num_points-1):
+               # render shell of cylinder/spacer discs
+               rect[0] = bottoms[k]
+               rect[1] = bottoms[k+1]
+               rect[2] = tops[k+1]
+               rect[3] = tops[k]
+               verts = [list(zip(rect[:,0], rect[:,1], rect[:,2]))]
+               collection = Poly3DCollection(verts, facecolors=color_segment2, alpha=alpha)
+               collection.set_facecolor(color_segment2)
+               self.ax.add_collection3d(collection)
+            # bottom and top polygons of spacer discs
+            verts = [list(zip(bottoms[:,0], bottoms[:,1], bottoms[:,2]))]
+            collection = Poly3DCollection(verts, color=color_segment2, alpha=alpha)
+            collection.set_edgecolor('k')
+            collection.set_facecolor(color_segment2)
+            self.ax.add_collection3d(collection)
+            verts = [list(zip(tops[:,0], tops[:,1], tops[:,2]))]
+            collection = Poly3DCollection(verts, alpha=alpha)
+            collection.set_edgecolor('k')
+            collection.set_facecolor(color_segment2)
+            self.ax.add_collection3d(collection)
+            ########## segment 2 tendons ##########
+            if i > 0:
+               self.ax.plot([tops_old[idx1, 0], bottoms[idx1, 0]], [tops_old[idx1, 1], bottoms[idx1, 1]], [tops_old[idx1, 2], bottoms[idx1, 2]], color="k", linewidth=lw)
+               self.ax.plot([tops_old[idx2, 0], bottoms[idx2, 0]], [tops_old[idx2, 1], bottoms[idx2, 1]], [tops_old[idx2, 2], bottoms[idx2, 2]], color="k", linewidth=lw)
+               self.ax.plot([tops_old[idx3, 0], bottoms[idx3, 0]], [tops_old[idx3, 1], bottoms[idx3, 1]], [tops_old[idx3, 2], bottoms[idx3, 2]], color="k", linewidth=lw)
+            tops_old = tops.copy()
+
    def init_render(self):
       """ sets up 3d plot """
       plt.ion() # interactive plot mode, panning, zooming enabled
@@ -487,7 +666,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.ax.set_zlabel("z in [m]")
       # add coordinate 3 arrows of base frame, have to be defined once!
       self.arrow_len = 0.03
-      self.arrow_lw = 1.5
+      self.arrow_lw = 2*1.5
       self.arrow_ms = 10
       ax_base = Arrow3D([0.0, self.arrow_len], [0.0, 0.0], [0.0, 0.0],
                         arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="r")
@@ -498,5 +677,32 @@ class TendonTwoSegmentSE3Env(Env):
       self.ax.add_artist(ax_base)
       self.ax.add_artist(ay_base)
       self.ax.add_artist(az_base)
-      plt.show() # display figure and bring focus (once) to plotting window
       self.fig.tight_layout() # fits the plot to window size
+      plt.show() # display figure and bring focus (once) to plotting window
+
+#plt.close("all")
+##
+#xylim_value = 0.08
+#zlim_max = 2*xylim_value
+#elev = 30
+#azim = 45
+#
+#env = TendonTwoSegmentSE3Env()
+#env.reset()
+#env.goal = env.tip_vec2
+##env.set_goal(np.array([env.lengths1, env.lengths2]).flatten())
+#env.tangent_vec_goal = env.tangent_vec2 + np.random.uniform(-0.5, 0.5, 3)
+#env.tangent_vec_goal /= norm(env.tangent_vec_goal)
+#env.render(render_spacer_discs=True, render_grid=False, render_axes=False, render_goal=True, render_legend=False, render_segment2=True,
+#           view=[elev,azim], num_points=7*12+1,
+#           xlim=[-xylim_value, xylim_value], ylim=[-xylim_value, xylim_value], zlim=[0.0, zlim_max])
+
+#env.reset([0.09, 0.085, 0.085, 0.2, 0.2, 0.2])
+#env.render(render_legend=False, render_segment1=False, render_spacer_discs=True, render_axes=False, render_segment2=False, render_goal=False,
+#           xlim=[-xylim_value, xylim_value], ylim=[-xylim_value, xylim_value], zlim=[0.0, zlim_max], view=[elev,azim], num_points=7*12+1)
+#for i in range(50):
+##   env.step([0.001,0.00,0.001, 0.001, 0.0, 0.01])
+#   env.step(env.action_space.sample())
+#   env.render(render_spacer_discs=True, render_grid=False)
+
+
