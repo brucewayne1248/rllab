@@ -8,6 +8,7 @@ import numpy as np
 import quaternion
 from rllab.sampler.utils import rollout_tendon
 from datetime import datetime
+import csv
 
 # used to name benchmark files and log files
 timestr = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -102,13 +103,23 @@ def log_results():
                  1000*np.max(dist_mins), 180/np.pi*anglediffs_tangent.mean(), 180/np.pi*np.max(anglediffs_tangent),
                  180/np.pi*Rdiffs.mean(), 180/np.pi*Pdiffs.mean(), 180/np.pi*Ydiffs.mean()
              ))
+       print("convenient info for copy/paste into overview spreadsheet\n{}/{} {} {} {} {} {} {} {} {} {} {} {}".format(
+              goals_reached+goals_reached_after_retries, total_episodes, steps_goal.mean(),
+              1000*dist_mins.mean(), 1000*dist_mins.std(), 1000*arc_lens.mean(), 100*dist_relmins.mean(),
+              1000*np.max(dist_mins), 180/np.pi*anglediffs_tangent.mean(), 180/np.pi*np.max(anglediffs_tangent),
+              180/np.pi*Rdiffs.mean(), 180/np.pi*Pdiffs.mean(), 180/np.pi*Ydiffs.mean()
+              ))
     else:
        logger.info("{}/{} {} {} {} {} {} {} {} {}".format(
                  goals_reached+goals_reached_after_retries, total_episodes, steps_goal.mean(),
                  1000*dist_mins.mean(), 1000*dist_mins.std(), 1000*arc_lens.mean(), 100*dist_relmins.mean(),
                  1000*np.max(dist_mins), 180/np.pi*anglediffs_tangent.mean(), 180/np.pi*np.max(anglediffs_tangent)
              ))
-
+       print("{}/{} {} {} {} {} {} {} {} {}".format(
+                 goals_reached+goals_reached_after_retries, total_episodes, steps_goal.mean(),
+                 1000*dist_mins.mean(), 1000*dist_mins.std(), 1000*arc_lens.mean(), 100*dist_relmins.mean(),
+                 1000*np.max(dist_mins), 180/np.pi*anglediffs_tangent.mean(), 180/np.pi*np.max(anglediffs_tangent)
+             ))
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('file', type=str,
@@ -129,9 +140,10 @@ if __name__ == "__main__":
                         0 - no retries; n - max of n retries')
     parser.add_argument('--dependent_actuation', type=int, default=1,
                         help='Indicating the robot is actuated, 0 or 1 accepted values')
+    parser.add_argument('--learning_curve', type=int, default=0,
+                        help='Indicating whether learning curve statistics are saved when evaluated to true.')
     args = parser.parse_args()
 
-    logger = create_logger(args.file)
 
     # If the snapshot file use tensorflow, do:
     # import tensorflow as tf
@@ -175,8 +187,6 @@ if __name__ == "__main__":
         env = data['env'] # wrapped env, access TendonOneSegmentEnv with env._wrapped_env
         lengths=None; goal=None; tangent_vec_goal=None
 
-        logger.info("ANN shapes: {}".format(policy._cached_param_shapes))
-        long_env_info(env, env._wrapped_env)
 
         if hasattr(env._wrapped_env, "dependent_actuation"):
            pass
@@ -187,12 +197,11 @@ if __name__ == "__main__":
         if hasattr(env._wrapped_env, "rewardfn_num"):
            pass
         else:
-           env._wrapped_env.rewardfn_num = 1
-           print("Created rewardfn_num attribute for tendon env")
+           env._wrapped_env.rewardfn_num = None
+           print("Created rewardfn_num attribute for tendon env: value {}".format(env._wrapped_env.rewardfn_num))
 
-        # set max steps of environment to high value to test max performance of agent
-#        env._wrapped_env.max_steps = 70
-#        print("NEW MAX STEPS", env._wrapped_env.max_steps )
+        if hasattr(env._wrapped_env, "ep"): pass
+        else: env._wrapped_env.ep = 1
 
         while episode < total_episodes:
             if test_data is not None: # set starting lengths and goal according to test batch
@@ -239,9 +248,9 @@ if __name__ == "__main__":
         goal_coordinates = np.array(goal_coordinates)
         closest_coordinates = np.array(closest_coordinates)
         if type(goal_quaternions[0]) == np.quaternion:
-           goal_quaternions = quaternion.as_float_array(goal_quaternions)
+            goal_quaternions = quaternion.as_float_array(goal_quaternions)
         if type(closest_quaternions[0]) == quaternion.quaternion:
-           closest_quaternions = quaternion.as_float_array(closest_quaternions)
+            closest_quaternions = quaternion.as_float_array(closest_quaternions)
         goal_quaternions = np.array(goal_quaternions)
         closest_quaternions = np.array(closest_quaternions)
         # convert to numpy arrays
@@ -251,13 +260,34 @@ if __name__ == "__main__":
         dist_relmins = np.array(dist_relmins)
         anglediffs_tangent = np.array(anglediffs_tangent)
         if RPYgoals:
-           RPYgoals = np.array(RPYgoals)
-           RPYmins = np.array(RPYmins)
-           Rdiffs = np.array(Rdiffs)
-           Pdiffs = np.array(Pdiffs)
-           Ydiffs = np.array(Ydiffs)
+            RPYgoals = np.array(RPYgoals)
+            RPYmins = np.array(RPYmins)
+            Rdiffs = np.array(Rdiffs)
+            Pdiffs = np.array(Pdiffs)
+            Ydiffs = np.array(Ydiffs)
 
         if args.save_benchmark:
-           save_benchmark(args.file)
+            logger = create_logger(args.file)
+            save_benchmark(args.file)
+            logger.info("ANN shapes: {}".format(policy._cached_param_shapes))
+            long_env_info(env, env._wrapped_env)
+            log_results()
 
-        log_results()
+        if args.learning_curve:
+               # write to csv file
+            directory = os.path.dirname(os.path.abspath(args.file))
+            filepath = directory + "/evaluation.csv"
+            create_header = False
+            try:
+                file = open(filepath, "r")
+            except:
+                file = open(filepath, "a")
+                create_header = True
+            file = open(filepath, "a")
+            writer = csv.writer(file)
+
+            if create_header is True:
+                writer.writerow(["itr", "episodes", "goals", "dist_mean", "dist_std", "dist_rel", "steps_to_goal"])
+            itr = int("".join(filter(str.isdigit, os.path.basename(args.file))))
+            writer.writerow([itr, args.episodes, goals_reached/args.episodes*100,
+                             dist_mins.mean()*1000, dist_mins.std()*1000, dist_relmins.mean()*100, steps_goal.mean()])

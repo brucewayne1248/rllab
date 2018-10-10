@@ -68,6 +68,7 @@ def rollout_tendon(env, agent, always_return_paths=True,
         env.render(mode=render_mode, save_frames=save_frames)
     while True:
         a, agent_info = agent.get_action(o) # agent = policy
+#        print(agent_info)
         next_o, r, d, env_info = env.step(a)
         observations.append(env.observation_space.flatten(o))
         rewards.append(r)

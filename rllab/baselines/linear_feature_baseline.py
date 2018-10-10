@@ -4,6 +4,7 @@ import numpy as np
 
 
 class LinearFeatureBaseline(Baseline):
+    """class that calculates Least-Squares TD for the return. Used to approximate return baseline. """
     def __init__(self, env_spec, reg_coeff=1e-5):
         self._coeffs = None
         self._reg_coeff = reg_coeff
@@ -20,7 +21,7 @@ class LinearFeatureBaseline(Baseline):
         o = np.clip(path["observations"], -10, 10) # clips observations between -10 and 10
         l = len(path["rewards"])
         al = np.arange(l).reshape(-1, 1) / 100.0 # column vector dim(path) containing steps divided by 100 [0.01, 0.02 ... T/100]
-        return np.concatenate([o, o ** 2, al, al ** 2, al ** 3, np.ones((l, 1))], axis=1) # linear feature vector consisting of row vectors of each feature
+        return np.concatenate([o, o ** 2, al, al ** 2, al ** 3, np.ones((l, 1))], axis=1) # linear feature vector consisting of row vectors of each feature as given in the paper Benchmarking continuous control by Duan, Chen
 
     @overrides
     def fit(self, paths):

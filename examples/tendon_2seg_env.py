@@ -4,9 +4,11 @@ from rllab.spaces import Box
 from rllab.utils.plot_utils import Arrow3D, plot_loop_pause
 
 import numpy as np
+import quaternion
 from numpy.linalg import norm
 from math import sqrt, asin, atan2, cos, sin, acos
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 class TendonTwoSegmentEnv(Env):
    """
@@ -37,6 +39,7 @@ class TendonTwoSegmentEnv(Env):
       self.dl21 = None; self.dl22 = None; self.dl23 = None; # effective  segment 2 tendon lengths (needed for kappa2, phi2, seg_len2)
       self.lengths1 = None # [l11, l12, l13]
       self.lengths2 = None # [l11, l12, l13]
+      self.closest_lengths = None # tendon lengths at closest position within one episode
 
       self.kappa1 = None # curvature kappa [m^(-1)]
       self.kappa2 = None # curvature kappa [m^(-1)]
@@ -56,10 +59,24 @@ class TendonTwoSegmentEnv(Env):
       self.tangent_vec2 = None # tangent vector robot's tip
       self.tip_vec1 = None # segment1 tip vector [m] [x, y, z]
       self.tip_vec2 = None # robot's tip vector [m] [x, y, z]
+      self.tip_vec2min = None # closest coordinates [x, y, z] within one episode
       self.old_dist_vec = None # goal-tip_vec in vector form, at time step t
       self.new_dist_vec = None # goal-tip_vec in vector form, at time step t+1 after taking action a_t
       self.old_dist_euclid = None # euclid dist to goal at time step t
       self.new_dist_euclid = None # euclid dist to goal at time step t+1 after taking action a_t
+
+      self.Rnew = None; self.Pnew = None; self.Ynew = None # RPY angles at timestep t+1
+      self.Rold = None; self.Pold = None; self.Yold = None # RPY angles at timestep t
+      self.Rgoal = None; self.Pgoal = None; self.Ygoal = None # RPY goal angles
+      self.Rmin = None; self.Pmin = None; self.Ymin = None # min RPY angles difference between goal's and robot's RPY
+
+      self.anglen_new = None; self.angleb_new = None; self.anglet_new = None # angles between normal, binormal, tangent vector of goal and tip vec at timestep t+1
+      self.anglen_old = None; self.angleb_old = None; self.anglet_old = None # angles between normal, binormal, tangent vector of goal and tip vec at timestep t
+      self.anglen_min = None; self.angleb_min = None; self.anglet_min = None # min angles between normal, binormal and tangent vectors
+
+      self.qnew = None; self.qold = None # robot's tip quaternion at timestep t+1 and t
+      self.qmin = None # min difference between goal's and robot's quaternion
+      self.qgoal = None # goal quaternion
 
       self.fig = None # fig variable used for plotting
       self.frame = 10000 # used to name frames when save_frames is active in render()
@@ -70,6 +87,8 @@ class TendonTwoSegmentEnv(Env):
       self.steps = None # current step the episode is in
       self.goal = None # goal to be reached by the robot's tip [x, y, z] [m]
       self.goal_lengths = None # tendon lengths of generated goal
+      self.normal_vec_goal = None # normal vector of goal position
+      self.binormal_vec_goal = None # binormal vector of goal position
       self.tangent_vec_goal = None # tangent vector of goal position
       self.delta_l = 0.001 # max tendon length change per timestep
       self.max_steps = 100 # max steps per episode
@@ -113,10 +132,22 @@ class TendonTwoSegmentEnv(Env):
       else:
          raise NotImplementedError
 
-      self._state = self.get_state()
+      self.tip_vec2min = self.tip_vec2
       self.dist_start = norm(self.goal-self.tip_vec2)
       self.dist_min = self.dist_start
-      self.anglet_min = self.get_diff_angle()
+      self.closest_lengths = np.array([self.l11, self.l12, self.l13, self.l21, self.l22, self.l23])
+
+      self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles() # angles between vectors
+      self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
+
+      self.Rmin, self.Pmin, self.Ymin = self.get_orientation(self.T02)
+
+      self.qmin = quaternion.as_float_array(quaternion.from_rotation_matrix(self.T02))
+      self.qmin = np.sign(self.qmin[0]) * self.qmin
+
+      self._state = self.get_state()
+
+#      self.anglet_min = self.get_diff_angle()
       self.steps = 0
       self.info["str"] = "Reset the environment."
       self.info["goal"] = False
@@ -143,16 +174,21 @@ class TendonTwoSegmentEnv(Env):
       T12 = self.transformation_matrix(kappa2, phi2, seg_len2)
       T02 = np.matmul(T01, T12)
       self.goal = np.matmul(T02, self.base)[0:3]
+      self.normal_vec_goal = T02[0:3, 0]
+      self.binormal_vec_goal = T02[0:3, 1]
       self.tangent_vec_goal =  T02[0:3, 2]
+      # quaternions
+      self.qgoal = quaternion.as_float_array(quaternion.from_rotation_matrix(T02[:3, :3]))
+      if np.sign(self.qgoal[0]) != 0.0:
+         self.qgoal = np.sign(self.qgoal[0]) * self.qgoal # make sure that quaternions all have the same sign for w
+      # calculate RPY angles of goal here or quaternion
+      self.Rgoal, self.Pgoal, self.Ygoal = self.get_orientation(T02)
 
    def step(self, action):
       """Steps the environment and returns new state, reward, done, info."""
       self.steps += 1
-
       self.take_action(action) # changes tendon lengths and updates configuration/work space
-
       self._state = self.get_state()
-
       reward, done, self.info = self.get_reward_done_info(self.new_dist_euclid, self.old_dist_euclid, self.steps)
 
       if done == True:
@@ -225,67 +261,79 @@ class TendonTwoSegmentEnv(Env):
 
       self.old_dist_vec = self.goal-self.tip_vec2
       self.old_dist_euclid = norm(self.old_dist_vec)
+      self.anglen_old, self.angleb_old, self.anglet_old = self.get_diff_angles()
       self.update_workspace()
       self.new_dist_vec = self.goal-self.tip_vec2
       self.new_dist_euclid = norm(self.new_dist_vec)
+      self.anglen_new, self.angleb_new, self.anglet_new = self.get_diff_angles()
       if self.new_dist_euclid < self.dist_min: # update min distance within one episode
+         self.tip_vec2min = self.tip_vec2
+         self.closest_lengths = np.array([self.l11, self.l12, self.l13, self.l21, self.l22, self.l23])
          self.dist_min = self.new_dist_euclid
-         self.anglet_min = self.get_diff_angle()
+#         self.anglet_min = self.get_diff_angle()
+         self.anglen_min, self.angleb_min, self.anglet_min = self.anglen_new, self.angleb_new, self.anglet_new
+         self.Rmin, self.Pmin, self.Ymin = self.get_orientation(self.T02)
+         self.qmin = quaternion.as_float_array(quaternion.from_rotation_matrix(self.T02[:3, :3]))
+         if np.sign(self.qmin[0]) != 0.0:
+            self.qmin *= np.sign(self.qmin[0])
 
    def get_reward_done_info(self, new_dist_euclid, old_dist_euclid, steps):
       """returns reward, done, info dict after taking action"""
       done = False
-      alpha = 0.4; c1 = 1; c2 = 100; gamma=0.99; cpot = 50 # reward function params
-      # regular step without terminating episode
-      wl = 1 # 'w'eight for 'l'inear distance reward
-      beta = 0.4 # exponent for sqrt distance potential
-      wls = 100 # 'w'eight for 'l'inear reward 's'haping
-      wps = 100 # 'w'eight for 'p'otential reward 's'haping
-      if self.rewardfn_num == 1:
-         reward = -1+cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-                           + (old_dist_euclid/self.dist_start)**alpha)
-      elif self.rewardfn_num == 2:
-         reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-                        +(old_dist_euclid/self.dist_start)**alpha)
-      elif self.rewardfn_num == 3:
-         reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
-      elif self.rewardfn_num == 4:
-         reward = -c2*(new_dist_euclid-old_dist_euclid)
-      elif self.rewardfn_num == 5:
-         reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
-                  -c2*(new_dist_euclid-old_dist_euclid)
-      elif self.rewardfn_num == 6:
-         reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
-                        +(old_dist_euclid/self.dist_start)**alpha) \
-                  -c2*(new_dist_euclid-old_dist_euclid)
-      elif self.rewardfn_num == 7:
-         reward = gamma*(1-(new_dist_euclid/self.dist_start)**alpha) - \
-                        (1-(old_dist_euclid/self.dist_start)**alpha)
-      elif self.rewardfn_num == 8:
-         reward = 1-((new_dist_euclid/self.dist_start)**alpha) \
-                  + cpot*(-gamma*((new_dist_euclid/self.dist_start)**alpha) \
-                          +((old_dist_euclid/self.dist_start)**alpha))
-      elif self.rewardfn_num == 9:
-         reward = 1-((new_dist_euclid/self.eps)**alpha)
-      elif self.rewardfn_num == 10: # linear
-         reward = -wl * new_dist_euclid
-      elif self.rewardfn_num == 11: # potential
-         reward = -((new_dist_euclid/self.eps)**beta)
-      elif self.rewardfn_num == 12: # linear shaping discounted
-         reward = -wls * (gamma * new_dist_euclid - old_dist_euclid)
-      elif self.rewardfn_num == 13: # linear shaping undiscounted
-         reward = -wls * (new_dist_euclid - old_dist_euclid)
-      elif self.rewardfn_num == 14: # potential shaping discounted
-         reward = -wps * (gamma * ((new_dist_euclid/self.eps)**beta) - ((old_dist_euclid/self.eps)**beta))
-      elif self.rewardfn_num == 15: # potential shaping undiscounted
-         reward = -wps * (((new_dist_euclid/self.eps)**beta) - ((old_dist_euclid/self.eps)**beta))
-      elif self.rewardfn_num == 16:
-         reward = 1-((new_dist_euclid/self.eps)**beta)
-
+      if self.rewardfn_num is not None:
+         alpha = 0.4; c1 = 1; c2 = 100; gamma=0.99; cpot = 50 # reward function params
+         # regular step without terminating episode
+         wl = 1 # 'w'eight for 'l'inear distance reward
+         beta = 0.4 # exponent for sqrt distance potential
+         wls = 100 # 'w'eight for 'l'inear reward 's'haping
+         wps = 100 # 'w'eight for 'p'otential reward 's'haping
+         if self.rewardfn_num == 1:
+            reward = -1+cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+                              + (old_dist_euclid/self.dist_start)**alpha)
+         elif self.rewardfn_num == 2:
+            reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+                           +(old_dist_euclid/self.dist_start)**alpha)
+         elif self.rewardfn_num == 3:
+            reward = -c1*((new_dist_euclid/self.dist_start)**alpha)
+         elif self.rewardfn_num == 4:
+            reward = -c2*(new_dist_euclid-old_dist_euclid)
+         elif self.rewardfn_num == 5:
+            reward = -c1*(new_dist_euclid/self.dist_start)**alpha \
+                     -c2*(new_dist_euclid-old_dist_euclid)
+         elif self.rewardfn_num == 6:
+            reward = cpot*(-gamma*(new_dist_euclid/self.dist_start)**alpha \
+                           +(old_dist_euclid/self.dist_start)**alpha) \
+                     -c2*(new_dist_euclid-old_dist_euclid)
+         elif self.rewardfn_num == 7:
+            reward = gamma*(1-(new_dist_euclid/self.dist_start)**alpha) - \
+                           (1-(old_dist_euclid/self.dist_start)**alpha)
+         elif self.rewardfn_num == 8:
+            reward = 1-((new_dist_euclid/self.dist_start)**alpha) \
+                     + cpot*(-gamma*((new_dist_euclid/self.dist_start)**alpha) \
+                             +((old_dist_euclid/self.dist_start)**alpha))
+         elif self.rewardfn_num == 9:
+            reward = 1-((new_dist_euclid/self.eps)**alpha)
+         elif self.rewardfn_num == 10: # linear
+            reward = -wl * new_dist_euclid
+         elif self.rewardfn_num == 11: # potential
+            reward = -((new_dist_euclid/self.eps)**beta)
+         elif self.rewardfn_num == 12: # linear shaping discounted
+            reward = -wls * (gamma * new_dist_euclid - old_dist_euclid)
+         elif self.rewardfn_num == 13: # linear shaping undiscounted
+            reward = -wls * (new_dist_euclid - old_dist_euclid)
+         elif self.rewardfn_num == 14: # potential shaping discounted
+            reward = -wps * (gamma * ((new_dist_euclid/self.eps)**beta) - ((old_dist_euclid/self.eps)**beta))
+         elif self.rewardfn_num == 15: # potential shaping undiscounted
+            reward = -wps * (((new_dist_euclid/self.eps)**beta) - ((old_dist_euclid/self.eps)**beta))
+         elif self.rewardfn_num == 16:
+            reward = 1-((new_dist_euclid/self.eps)**beta)
+      else:
+         reward = None
       """R7 like R5 but leave out gamma_t at the bottom"""
 
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(new_dist_euclid-old_dist_euclid))
+
 
       #terminate episode, when
       # 1. moving too far from goal
@@ -343,10 +391,32 @@ class TendonTwoSegmentEnv(Env):
                        [0, 0, 0, 1]])
       return T
 
-   def get_diff_angle(self, degree=False):
-      alpha = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / \
-                  (norm(self.tangent_vec2) * norm(self.tangent_vec_goal))
-      return alpha*180/np.pi if degree else alpha
+   def get_diff_angles(self, degree=False):
+      """Returns the angles between normal, binormal, and tangent vector of goal and robot orientation"""
+      anglen = acos(np.dot(self.normal_vec2, self.normal_vec_goal)) / ((norm(self.normal_vec2)*norm(self.normal_vec_goal)) + 1e-8)
+      angleb = acos(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / ((norm(self.binormal_vec2)*norm(self.binormal_vec_goal)) +1e-8)
+      anglet = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / ((norm(self.tangent_vec2)*norm(self.tangent_vec_goal)) + 1e-8)
+      return (anglen*180/np.pi, angleb*180/np.pi, anglet*180/np.pi) if degree else (anglen, angleb, anglet)
+
+   def get_orientation(self, T, representation="eulerZYX", degree=False):
+      T = np.array(T)
+      if representation == "eulerZYX":
+      # R = R_x(theta1) R_y(theta2) R_z(theta3) corresponds to RPY - theta1 = PHI/R, theta2 = Theta/P, theta3 = Psi/Y
+      # See https://pdfs.semanticscholar.org/6681/37fa4b875d890f446e689eea1e334bcf6bf6.pdf
+      # handles the singularity at theta2 +- pi/2 by setting theta1 = 0 and theta3 accounts for whole rotation
+         theta1 = atan2(T[1,2], T[2,2])
+         c2 = sqrt(T[0,0]**2+T[0,1]**2)
+         theta2 = atan2(-T[0,2], c2)
+         s1 = sin(theta1); c1 = cos(theta1)
+         theta3 = atan2(s1*T[2,0]-c1*T[1,0], c1*T[1,1]-s1*T[2,1])
+#         theta3 = atan2(T[0,1], T[00])
+      elif representation == "eulerZYZ":
+      # R = R_z(theta1) R_y(theta2) R_z(theta3)
+      # NEEDS HANDLING OF SINGULARITY FOR THETA2 ~ 0
+         theta2 = atan2(sqrt(T[2,0]**2+T[2,1]**2), T[2,2])
+         theta1 = atan2(T[1,2]/sin(theta2), T[0,2]/sin(theta2))
+         theta3 = atan2(T[2,1]/sin(theta2), -T[2,0]/sin(theta2))
+      return (theta1*180/np.pi, theta2*180/np.pi, theta3*180/np.pi) if degree else (theta1, theta2, theta3)
 
    def render(self, mode="human", pause=0.0000001, save_frames=False):
       """ renders the 3d plot of the robot's arc, pause (float) determines how long each frame is shown
