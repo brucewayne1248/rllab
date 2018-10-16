@@ -24,9 +24,9 @@ def run_task(*_):
          env=env,
          policy=policy,
          baseline=baseline,
-         batch_size = 75000,
+         batch_size = 10,
          max_path_length=np.inf,
-         n_itr=10001,
+         n_itr=10,
          discount=0.99,
          step_size=0.01,
          gae_lambda=1,
@@ -35,8 +35,8 @@ def run_task(*_):
 
 run_experiment_lite(
       run_task,
-      n_parallel=2,
-      exp_name="GAEtest",
+      n_parallel=1,
+      exp_name="test_final",
       snapshot_mode="gap",
       snapshot_gap=1,
       seed=1,

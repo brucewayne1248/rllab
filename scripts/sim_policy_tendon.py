@@ -26,8 +26,6 @@ def create_logger(filename):
     return logger
 
 def long_env_info(env, env_wrapped):
-#   print(vars(env))
-#   print(env_wrapped.__dict__)
    logger.info(env._Serializable__args)
    if hasattr(env_wrapped, 'lmin'):
       logger.info("lmin: {}".format(env_wrapped.lmin))
@@ -50,23 +48,6 @@ def long_env_info(env, env_wrapped):
    if hasattr(env_wrapped, "dependent_actuation"):
       logger.info("dependent_actuation: {}".format(env_wrapped.dependent_actuation))
    logger.info("goals: {}/{}".format(env_wrapped.total_goals_reached, env_wrapped.total_episodes))
-
-def retry_ep(goal, tangent_vec_goal, max_retries=1, verbose=False):
-    lengths = None
-    for retry in range(max_retries):
-        path = rollout_tendon(env, policy, always_return_paths=True,
-                              render_mode="human",
-                              save_frames=1,
-                              lengths=lengths, goal=goal, tangent_vec_goal=tangent_vec_goal)
-
-        if env._wrapped_env.info["goal"] == True: break
-
-    if env._wrapped_env.info["goal"] == True: # goal reached
-        if verbose: print("Goal reached after {} retries.".format(retry+1))
-        return True
-    else:
-        if verbose: print("Goal still not reached after {} retries.".format(retry+1))
-        return False
 
 def save_benchmark(filename):
     global dist_mins, arc_lens, dist_relmins, anglediffs_tangent, RPYgoals, RPYmins, Rdiffs, Pdiffs, Ydiffs, goal_coordinates, goal_quaternions, closest_coordinates, closest_quaternions
@@ -134,16 +115,7 @@ if __name__ == "__main__":
                         help='Saves frames of human rendered environment if evaluated to True')
     parser.add_argument('--save_benchmark', type=int, default=0,
                         help='Saves .pickle and .mat file in directory of snapshot file if int(save_benchmark) evaluates to True')
-    parser.add_argument('--retry', type=int, default=0,
-                        help='Integer indicating how many retries one episode should have \
-                        to same goal with different starting position, in case goal is not reached:\
-                        0 - no retries; n - max of n retries')
-    parser.add_argument('--dependent_actuation', type=int, default=1,
-                        help='Indicating the robot is actuated, 0 or 1 accepted values')
-    parser.add_argument('--learning_curve', type=int, default=0,
-                        help='Indicating whether learning curve statistics are saved when evaluated to true.')
     args = parser.parse_args()
-
 
     # If the snapshot file use tensorflow, do:
     # import tensorflow as tf
@@ -186,22 +158,6 @@ if __name__ == "__main__":
         policy = data['policy']
         env = data['env'] # wrapped env, access TendonOneSegmentEnv with env._wrapped_env
         lengths=None; goal=None; tangent_vec_goal=None
-
-
-        if hasattr(env._wrapped_env, "dependent_actuation"):
-           pass
-        else:
-           env._wrapped_env.dependent_actuation = args.dependent_actuation
-           print("Created depenpent_actuation attribute for Tendon Env.")
-
-        if hasattr(env._wrapped_env, "rewardfn_num"):
-           pass
-        else:
-           env._wrapped_env.rewardfn_num = None
-           print("Created rewardfn_num attribute for tendon env: value {}".format(env._wrapped_env.rewardfn_num))
-
-        if hasattr(env._wrapped_env, "ep"): pass
-        else: env._wrapped_env.ep = 1
 
         while episode < total_episodes:
             if test_data is not None: # set starting lengths and goal according to test batch

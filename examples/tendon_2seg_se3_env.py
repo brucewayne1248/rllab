@@ -126,7 +126,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.dist_end = None # euclidean end distance to goal of episode
       self.dist_min = None # euclidean mmin distance to goal reached within each episode
       self.fig = None # fig variable used for plotting
-      self.frame = 10000
+      self.ep = 0
 
    @property
    def observation_space(self):
@@ -180,7 +180,6 @@ class TendonTwoSegmentSE3Env(Env):
       self.steps = 0
       self.info["str"] = "Reset the environment."
       self.info["goal"] = False
-      self.ep += 1
       self.frame = 0
       return self._state
 
@@ -317,53 +316,15 @@ class TendonTwoSegmentSE3Env(Env):
       dnew = self.dist_euclid_new; dold = self.dist_euclid_old; dstart = self.dist_start # new and old euclidean distances
       atnew = self.anglet_new; atold = self.anglet_old # new and old angle between tangent vectors
 
-      if self.rewardfn_num is not None:
-         # reward fn params
-         alpha = 0.4; beta = 0.4; alphap = 0.4; alphao = 0.1;
-         wp = 1; # 'w'eight of total 'p'osition reward
-         wo = (1-(dnew/dstart))**beta if dnew < dstart else 0 # 'w'eight of total 'o'rientation reward
-         wsp = 50 # 'w'eight of 's'haping reward for 'p'osition
-         wso = 50 # 'w'eight of 's'haping reward for 'o'rientation
-         gamma = 0.99 # discount for potential based shaping
-         wpp = 1; # 'w'eight of 'p'otential reward for 'p'osition
-         wpo = 1; # 'w'eight of 'p'otential reward for 'o'rientation
-         wlp = 100; # 'w'eight of 'l'inear reward for 'p'osition
-         wlo = 100; # 'w'eight of 'l'inear reward for 'o'rientation
+      # reward fn params
+      zeta = 0.4; xi_d = 1; xi_alpha = 1;
+      wo = (1-(dnew/dstart))**zeta if dnew < dstart else 0 # 'w'eight of total 'o'rientation reward
 
-         # regular step without terminating episode, rp = position reward, ro = orientation reward
-         if self.rewardfn_num == 1:
-            rp = -1+wsp*(-gamma*(dnew/dstart)**alpha + (dold/dstart)**alpha)
-            ro =    wso*(-gamma*(atnew/np.pi)**alpha + (atold/np.pi)**alpha)
-         elif self.rewardfn_num == 2:
-            rp = wsp*(-gamma*(dnew/dstart)**alpha + (dold/dstart)**alpha)
-            ro = wso*(-gamma*(atnew/np.pi)**alpha + (atold/np.pi)**alpha)
-         elif self.rewardfn_num == 3:
-            rp = -wpp*((dnew/dstart)**alphap)
-            ro = -wpo*((atnew/np.pi)**alphao)
-         elif self.rewardfn_num == 4:
-            rp = -wlp*(dnew-dold)
-            ro = -wlo*(atnew-atold)
-         elif self.rewardfn_num == 5:
-            rp = -wpp*(dnew/dstart)**alpha - wlp*(dnew-dold)
-            ro = -wpo*(atnew/np.pi)**alpha - wlo*(atnew-atold)
-         elif self.rewardfn_num == 6:
-            rp = 1-wpp*((dnew/dstart)**alphap)
-            ro = 1-wpo*((atnew/np.pi)**alphao)
-         elif self.rewardfn_num == 7:
-            pass
-         elif self.rewardfn_num == 8:
-            rp = 1-((dnew/dstart)**alpha) + wsp*(-gamma*((dnew/dstart)**alpha) + ((dold/dstart)**alpha))
-            ro = 1-((atnew/np.pi)**alpha) + wso*(-gamma*((atnew/np.pi)**alpha) + ((atnew/np.pi)**alpha))
-         elif self.rewardfn_num == 9:
-            rp = 1-((dnew/self.eps_dist)**alphap)
-            ro = 1-((atnew/self.eps_angle)**alphao)
-         elif self.rewardfn_num == 10:
-            rp = 1-((dnew/self.eps_dist)**alphap)
-            ro = np.max(0 , 1-((atnew/self.eps_angle)**alphao))
+      # regular step without terminating episode, rp = position reward, ro = orientation reward
+      rp = 1-((dnew/self.eps_dist)**xi_d)
+      ro = 1-((atnew/self.eps_angle)**xi_alpha)
 
-         reward = wp*rp + wo*ro
-      else:
-         reward = None
+      reward = rp + wo*ro
 
       self.info["str"] = "Regular step @ {:3d}, dist covered: {:5.2f}" \
                          .format(self.steps, 1000*(dnew-dold))
@@ -375,7 +336,6 @@ class TendonTwoSegmentSE3Env(Env):
 
          done = True
          self.dist_end = dnew
-#         self.diff_angle_end = atnew
 
          if dnew < self.eps_dist and atnew < self.eps_angle:
             reward = 150
@@ -385,8 +345,7 @@ class TendonTwoSegmentSE3Env(Env):
          elif self.steps >= self.max_steps:
             self.info["str"] = "Max steps {}, distance to finish {:5.2f}mm, total distance covered {:5.2f}mm." \
                                .format(self.max_steps, 1000*self.dist_end, 1000*(dstart-self.dist_end))
-#      gamma_t = 1-(self.steps/(self.max_steps+1))
-#      reward = gamma_t*reward
+
       return reward, done, self.info
 
    def arc_params(self, l1, l2, l3):
@@ -421,7 +380,6 @@ class TendonTwoSegmentSE3Env(Env):
    def get_diff_angles(self, degree=False):
       """Returns the angles between normal, binormal, and tangent vector of goal and robot orientation"""
       anglen = acos(np.dot(self.normal_vec2, self.normal_vec_goal)) / ((norm(self.normal_vec2)*norm(self.normal_vec_goal)) + 1e-8)
-#      print(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / ((norm(self.binormal_vec2)*norm(self.binormal_vec_goal)) +1e-8)
       angleb = acos(np.dot(self.binormal_vec2, self.binormal_vec_goal)) / ((norm(self.binormal_vec2)*norm(self.binormal_vec_goal)) +1e-8)
       anglet = acos(np.dot(self.tangent_vec2, self.tangent_vec_goal)) / ((norm(self.tangent_vec2)*norm(self.tangent_vec_goal)) + 1e-8)
       return (anglen*180/np.pi, angleb*180/np.pi, anglet*180/np.pi) if degree else (anglen, angleb, anglet)
@@ -437,7 +395,6 @@ class TendonTwoSegmentSE3Env(Env):
          theta2 = atan2(-T[0,2], c2)
          s1 = sin(theta1); c1 = cos(theta1)
          theta3 = atan2(s1*T[2,0]-c1*T[1,0], c1*T[1,1]-s1*T[2,1])
-#         theta3 = atan2(T[0,1], T[00])
       elif representation == "eulerZYZ":
       # R = R_z(theta1) R_y(theta2) R_z(theta3)
       # NEEDS HANDLING OF SINGULARITY FOR THETA2 ~ 0
@@ -472,7 +429,6 @@ class TendonTwoSegmentSE3Env(Env):
          if view is not None:
             self.ax.view_init(elev=view[0], azim=view[1])
 
-#         self.azim += 1
          self.ax.view_init(elev=self.elev, azim=self.azim)
 
          points1, points2 = self.points_on_arc(100) # points to be plotted from base to robot's tip
@@ -485,7 +441,6 @@ class TendonTwoSegmentSE3Env(Env):
             self.ax.plot(points1[:,0], points1[:,1], points1[:,2], label="Segment 1", c="black", linewidth=lw)
          if render_goal:
             self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], linestyle=None, label="Ziel", c="magenta", marker="o", markersize=9)
-#            self.ax.plot([self.goal[0]], [self.goal[1]], [self.goal[2]], label="Ziel", c="magenta", marker="x", markersize=11)
          if render_legend: self.ax.legend()
 
          # clear spacer discs
@@ -562,14 +517,13 @@ class TendonTwoSegmentSE3Env(Env):
       lw = 1
       enlarge_factor = 1.5
       r = enlarge_factor * self.d
-      alpha_face = 0.4 # opacity for spacer discs
-      alpha_edge = 0.6
+      alpha_face = 0.35 # opacity for spacer discs
+      alpha_edge = 0.35
       n = self.n # number of spacer discs
       thickness = 0.002 # of spacer discs
 
-
       color_segment1 = [0.00000,0.313725,0.607843, alpha_face] # imes blue
-      color_segment2 = [0.90588235,0.48235,0.160784, alpha_face] # imes green
+      color_segment2 = [0.90588235,0.48235,0.160784, alpha_face] # imes orange
       color_edge = [0,0,0, alpha_edge]
       # indexes used to plot tendons between spacer discs
       degree_step = 2*np.pi / (num_points-1)
@@ -590,9 +544,7 @@ class TendonTwoSegmentSE3Env(Env):
       centers = np.zeros((num_points, 3))
       tops = np.zeros((num_points, 3))
       bottoms = np.zeros((num_points, 3))
-#      centers_old = np.zeros((num_points, 3))
       tops_old = np.zeros((num_points, 3))
-#      bottoms_old = np.zeros((num_points, 3))
       for i in range(n):
          T = self.transformation_matrix(self.kappa1, self.phi1, s_values[i])
          tan_vec = T[:3, 2]
@@ -630,13 +582,10 @@ class TendonTwoSegmentSE3Env(Env):
       ########## segment 2 spacer discs ##########
       if render_segment2:
          s_values = np.linspace(0, self.seg_len2, n+1)
-   #      for i in range(num_points):
-   #         base_points_transform[i] = np.matmul(self.T01, base_points_transform[i])
          for i in range(1, n+1):
             T = np.matmul(self.T01, self.transformation_matrix(self.kappa2, self.phi2, s_values[i]))
             tan_vec = T[:3, 2]
             for j in range(num_points):
-   #            centers[j] = np.matmul(self.T01, np.matmul(T, base_points_transform[j]))[:3]
                centers[j] = np.matmul(T, base_points_transform[j])[:3]
                tops[j] = centers[j] + 0.5*thickness*tan_vec
                bottoms[j] = centers[j] - 0.5*thickness*tan_vec
@@ -651,7 +600,6 @@ class TendonTwoSegmentSE3Env(Env):
                collection.set_facecolor(color_segment2)
                self.ax.add_collection3d(collection)
             # bottom and top polygons of spacer discs
-            # bottom and top polygons of spacer discs
             verts = [list(zip(bottoms[:,0], bottoms[:,1], bottoms[:,2]))]
             collection = Poly3DCollection(verts)
             collection.set_edgecolor(color_edge)
@@ -663,16 +611,6 @@ class TendonTwoSegmentSE3Env(Env):
             collection.set_facecolor(color_segment2)
             self.ax.add_collection3d(collection)
 
-#            verts = [list(zip(bottoms[:,0], bottoms[:,1], bottoms[:,2]))]
-#            collection = Poly3DCollection(verts, color=color_segment2, alpha=alpha)
-#            collection.set_edgecolor('k')
-#            collection.set_facecolor(color_segment2)
-#            self.ax.add_collection3d(collection)
-#            verts = [list(zip(tops[:,0], tops[:,1], tops[:,2]))]
-#            collection = Poly3DCollection(verts, alpha=alpha)
-#            collection.set_edgecolor('k')
-#            collection.set_facecolor(color_segment2)
-#            self.ax.add_collection3d(collection)
             ########## segment 2 tendons ##########
             if i > 0:
                self.ax.plot([tops_old[idx1, 0], bottoms[idx1, 0]], [tops_old[idx1, 1], bottoms[idx1, 1]], [tops_old[idx1, 2], bottoms[idx1, 2]], color="k", linewidth=lw)
@@ -685,14 +623,11 @@ class TendonTwoSegmentSE3Env(Env):
       self.elev = 25
       self. azim = 45
       plt.ion() # interactive plot mode, panning, zooming enabled
-#      self.fig = plt.figure()
       window_scale = 1.25
       self.fig = plt.figure(figsize=(window_scale*8,window_scale*6))
-#      self.fig = plt.figure(figsize=(1.25*9.5,1.25*7.2))
-#      self.fig = plt.figure(figsize=(19.2,16.8))
       self.ax = self.fig.add_subplot(111, projection="3d") # attach z-axis to plot
       # set axis limits and labels
-      shrink = 0.75
+      shrink = 0.85
       self.ax.set_xlim([-0.5*shrink*self.l2max, 0.5*shrink*self.l2max])
       self.ax.set_ylim([-0.5*shrink*self.l2max, 0.5*shrink*self.l2max])
       self.ax.set_zlim([0.0, shrink*self.l2max])
@@ -701,7 +636,7 @@ class TendonTwoSegmentSE3Env(Env):
       self.ax.set_zlabel("z [m]")
       # add coordinate 3 arrows of base frame, have to be defined once!
       self.arrow_len = 0.045
-      self.arrow_lw = 3.1*1.5
+      self.arrow_lw = 2.7*1.5
       self.arrow_ms = 17
       ax_base = Arrow3D([0.0, self.arrow_len], [0.0, 0.0], [0.0, 0.0],
                         arrowstyle="-|>", lw=self.arrow_lw, mutation_scale=self.arrow_ms, color="r")
@@ -715,50 +650,4 @@ class TendonTwoSegmentSE3Env(Env):
       self.fig.tight_layout() # fits the plot to window size
       plt.show() # display figure and bring focus (once) to plotting window
 
-#plt.close("all")
-#
-#env = TendonTwoSegmentSE3Env()
-#if hasattr(env, "ep"):
-#   pass
-#else:
-#   env.ep = 1
-#env.reset()
-#env.render(render_goal=False)
-
-##
-#xylim_value = 0.08
-#zlim_max = 2*xylim_value
-#elev = 30
-#azim = 45
-#
-#
-#
-#
-#env = TendonTwoSegmentSE3Env()
-#
-#
-#env.reset()
-#
-#random_vector = np.random.uniform(-0.009, 0.009, 3)
-#env.set_goal(np.array([env.lengths1+random_vector, env.lengths2+random_vector]).flatten())
-#env.goal = env.tip_vec2
-#env.render(render_spacer_discs=True, render_axes=False, render_goal=True, render_legend=False, render_segment2=True,
-#           view=[elev,azim], num_points=7*12+1,
-#           xlim=[-xylim_value, xylim_value], ylim=[-xylim_value, xylim_value], zlim=[0.0, zlim_max])
-#env.tangent_vec_goal += random_vector
-#env.normal_vec_goal += random_vector
-#env.binormal_vec_goal += random_vector
-#env.tangent_vec_goal /= norm(env.tangent_vec_goal)
-#env.normal_vec_goal /= norm(env.normal_vec_goal)
-#env.binormal_vec_goal /= norm(env.binormal_vec_goal)
-
-#env.reset([0.09, 0.085, 0.085, 0.2, 0.2, 0.2])
-#env.render(render_legend=False, render_segment1=False, render_spacer_discs=True, render_axes=False, render_segment2=False, render_goal=False,
-#           xlim=[-xylim_value, xylim_value], ylim=[-xylim_value, xylim_value], zlim=[0.0, zlim_max], view=[elev,azim], num_points=7*12+1)
-
-#for i in range(50):
-##   env.step([0.001,0.00,0.001, 0.001, 0.0, 0.01])
-#   env.step(env.action_space.sample())
-#   env.render(render_spacer_discs=True, render_grid=False)
-
-
+plt.close("all")
